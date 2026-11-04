@@ -32,7 +32,17 @@ class SpotlightSession:
                 raise ValueError("Install the unified Spotlight Data\\patch-Z.MPQ with all three animation slots.")
             with runtime_poc.ClientProcess(pid, runtime.executable) as process:
                 duet_select.verify_image(process)
-                duet_select.install_once(process, pid)
+                while not self.closed.is_set() and process.read(duet_select.IMAGE_BASE, 2) == b"MZ":
+                    try:
+                        duet_select.install_once(process, pid)
+                    except ValueError:
+                        if not duet_select.active_guid(process) or duet_select.inspect_selector(process) is not None:
+                            raise
+                        self.closed.wait(POLL_SECONDS)
+                    else:
+                        break
+                else:
+                    return
                 self.viewer = Viewer(process, runtime, self.relay, self.client_dir / "Spotlight" / "shared",
                                      slots=remote_slots)
                 self.ready.set()
