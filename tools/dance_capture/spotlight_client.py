@@ -25,6 +25,8 @@ def main():
     settings = json.loads((app.parent / "settings.json").read_text(encoding="utf-8"))
     relay = Relay(settings["relay_url"])
     bridge_args = ["--client-dir", str(client), "--comfy-url", settings["comfy_url"]]
+    if settings.get("gallery_url"):
+        bridge_args.extend(("--gallery-url", settings["gallery_url"]))
     token = app.parent / "relay.token"
     if token.is_file():
         bridge_args.extend(("--relay-url", relay.base_url, "--relay-token-file", str(token)))

@@ -2,6 +2,8 @@
 
 WoWSpotlight je PoC pro tvorbu vlastních tanců z videa ve WoW 3.3.5a. Hráč otevře panel příkazem `/spotlight`, vybere MP4 a po zpracování v ComfyUI najde klip v knihovně **My dances**. Klient načte animaci za běhu a připravený klient diváka si ji může [automaticky stáhnout](docs/sharing.md).
 
+Hotové animace z ComfyUI se automaticky zobrazí také ve [webové galerii AI World Labu](http://192.168.0.248:9093/). Ve hře otevři `/spotlight` → **Gallery**, klikni na **Download** u vybraného tance a pak ho spusť z **My dances**. [Provoz galerie v Dockeru](docs/gallery.md)
+
 ## Spuštění v čistém klientu
 
 Zkopíruj obsah `C:\WoWSpotlight\artifacts\player-files` do čistého klienta WoW 3.3.5a enUS a spusť jeho `WoW.exe`. Přihlas se za lidskou mužskou postavu, nech WoW v režimu okna a otevři `/spotlight`. Stejný klient automaticky přehrává sdílené tance ostatních. [Přesný postup pro lab](docs/player-files.md)

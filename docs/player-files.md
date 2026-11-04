@@ -9,6 +9,8 @@ Spotlight přijímá původní podepsaný `WoW.exe` pro enUS build 12340 a ově�
 
 Vlastní tanec spustíš tlačítkem **Play dance**. Příkaz `/dance` přehraje běžný tanec WoW i po načtení vlastního klipu. Každý klient má prostor pro vlastní tanec a dva současně sledované tanečníky.
 
+Pro stažení hotového tance otevři `/spotlight` → **Gallery** a klikni na řádek s **Download**. Přepni na **My dances**, vyber stažený tanec a po načtení stiskni **Play dance**. Webovou galerii otevřeš na síti AI World Labu. [Galerie Spotlight](http://192.168.0.248:9093/)
+
 Složka klienta po zkopírování obsahuje tyto nové soubory a adresáře.
 
 ```text
@@ -35,4 +37,4 @@ py -3.12 -B '.\tools\dance_capture\build_unified_files.py' '.\artifacts\player-f
     --client-data 'C:\WoWModding\Client-Lab\Data' --bootstrap '.\artifacts\unified-work\dinput8.dll'
 ```
 
-Výstupní složka musí být nová. Pro jiný lab nastav adresu realmu volbou `--realmlist` a adresy služeb volbami `--comfy-url` a `--relay-url`.
+Výstupní složka musí být nová. Pro jiný lab nastav adresu realmu volbou `--realmlist` a adresy služeb volbami `--comfy-url`, `--relay-url` a `--gallery-url`.

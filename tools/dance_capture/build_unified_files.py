@@ -17,7 +17,7 @@ from stormlib import Archive, DLL_PATH
 TOOLS = Path(__file__).resolve().parent
 COMPANION = (
     "arm_motion", "client_poc", "duet_assets", "duet_runtime", "duet_select", "preview_poc", "runtime_poc",
-    "spotlight_bridge", "spotlight_client", "spotlight_comfy", "spotlight_http", "spotlight_ipc",
+    "spotlight_bridge", "spotlight_client", "spotlight_comfy", "spotlight_gallery", "spotlight_http", "spotlight_ipc",
     "spotlight_library", "spotlight_publish", "spotlight_session", "spotlight_viewer", "stormlib",
 )
 
@@ -73,6 +73,7 @@ def main():
     parser.add_argument("--client-data", type=Path, required=True)
     parser.add_argument("--bootstrap", type=Path, required=True)
     parser.add_argument("--comfy-url", default="http://192.168.0.248:8188")
+    parser.add_argument("--gallery-url", default="http://192.168.0.248:9093")
     parser.add_argument("--relay-url", default="http://192.168.0.248:8765")
     parser.add_argument("--realmlist", default="192.168.0.248")
     args = parser.parse_args()
@@ -85,8 +86,8 @@ def main():
     if not args.realmlist or not all(char.isascii() and (char.isalnum() or char in ".-:[]") for char in args.realmlist):
         parser.error("Supply a realm address without spaces.")
     try:
-        build_files(data, args.bootstrap, output, {"comfy_url": args.comfy_url, "relay_url": args.relay_url},
-                    args.realmlist)
+        settings = {"comfy_url": args.comfy_url, "gallery_url": args.gallery_url, "relay_url": args.relay_url}
+        build_files(data, args.bootstrap, output, settings, args.realmlist)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Could not build Spotlight client files: {error}\n")
     print(output)

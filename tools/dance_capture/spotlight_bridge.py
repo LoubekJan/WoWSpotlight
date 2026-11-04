@@ -21,10 +21,11 @@ import client_poc
 import duet_select
 import runtime_poc
 from spotlight_comfy import DEFAULT_COMFY_URL, run_comfy_video
+from spotlight_gallery import Gallery
 from spotlight_http import Relay
 from spotlight_ipc import (
     MAX_REPLY_BYTES, PAYLOAD_HEIGHT, PAYLOAD_SIGNALS, PAYLOAD_WIDTH, SIGNALS,
-    STOCK_DANCE_SIGNAL, color_index, error_reply, library_reply, read_payload,
+    STOCK_DANCE_SIGNAL, color_index, error_reply, gallery_reply, hex_field, library_reply, read_payload,
 )
 from spotlight_library import DanceLibrary
 from spotlight_publish import Publisher, local_dance, read_token
@@ -250,7 +251,8 @@ class GameWindow:
 
 
 class SpotlightBridge:
-    def __init__(self, root, game, client_dir, base_url, stormlib_module, publisher, session=None, game_pid=None):
+    def __init__(self, root, game, client_dir, base_url, stormlib_module, publisher, session=None, game_pid=None,
+                 gallery=None):
         self.root, self.game, self.client_dir, self.base_url = root, game, client_dir, base_url
         self.stormlib_module = stormlib_module
         self.events = SimpleQueue()
@@ -272,6 +274,7 @@ class SpotlightBridge:
         self.session = session
         self.session_thread = None
         self.game_pid = game_pid
+        self.gallery = gallery
         samples = client_dir.parent / "Clips"
         self.video_dir = samples if samples.is_dir() else Path.home()
 
@@ -313,6 +316,20 @@ class SpotlightBridge:
             if self.session and action in ("upload", "load", "retry"):
                 self.session.require_ready()
             library = DanceLibrary(self.client_dir, guid)
+            if action in ("gallery", "download"):
+                if not self.gallery:
+                    raise ValueError("The Spotlight gallery has not been configured for this client.")
+                if action == "gallery":
+                    page = int(payload) if payload.isascii() and payload.isdecimal() else 1
+                    reply = gallery_reply(*self.gallery.list(page))
+                else:
+                    name, raw = self.gallery.download(payload)
+                    if self.player(pid) != guid:
+                        raise ValueError("The active character changed before the dance could be saved.")
+                    entry = library.import_dance(raw, name, payload)
+                    reply = f"download|{hex_field(entry.name)}"
+                self.events.put(("reply", guid, reply))
+                return
             if action == "list":
                 self.page = int(payload) if payload.isascii() and payload.isdecimal() else 1
             elif action == "rename":
@@ -491,6 +508,7 @@ def main(argv=None, *, session_factory=None, game_pid=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--client-dir", type=Path, default=runtime_poc.DEFAULT_CLIENT)
     parser.add_argument("--comfy-url", default=DEFAULT_COMFY_URL)
+    parser.add_argument("--gallery-url", help="Spotlight web gallery used by the add-on")
     parser.add_argument("--stormlib-module", type=Path, default=client_poc.DEFAULT_STORMLIB)
     parser.add_argument("--relay-url", help="Optional Spotlight relay for sharing dances")
     parser.add_argument("--relay-token-file", type=Path, help="Private token for this test character")
@@ -513,6 +531,7 @@ def main(argv=None, *, session_factory=None, game_pid=None):
     mutex = None
     publisher = None
     try:
+        gallery = Gallery(args.gallery_url) if args.gallery_url else None
         if client_dir == client_poc.DEFAULT_DATA.resolve().parent:
             raise ValueError("Použij oddělenou testovací kopii WoW.")
         if not runtime_poc.is_verified_executable(executable):
@@ -538,7 +557,8 @@ def main(argv=None, *, session_factory=None, game_pid=None):
         return
     stormlib_module = args.stormlib_module.resolve()
     session = session_factory(client_dir, stormlib_module) if session_factory else None
-    bridge = SpotlightBridge(root, game, client_dir, args.comfy_url, stormlib_module, publisher, session, game_pid)
+    bridge = SpotlightBridge(root, game, client_dir, args.comfy_url, stormlib_module, publisher, session, game_pid,
+                             gallery=gallery)
     logging.info("Spotlight is waiting for requests from %s", executable)
     root.after(250, bridge.poll)
     try:

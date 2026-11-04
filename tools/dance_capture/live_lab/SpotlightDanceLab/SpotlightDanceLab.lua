@@ -10,6 +10,9 @@ local states = {
     processing = "Creating your dance...",
     loading = "Loading the saved dance...",
     library = "Loading your dances...",
+    gallery = "Loading the dance gallery...",
+    galleryReady = "Click a dance to save it to My dances.",
+    downloading = "Downloading the dance...",
     renaming = "Saving the new name...",
     ready = "Your dance is ready.",
     error = "Spotlight could not load the dance. Try again.",
@@ -23,6 +26,7 @@ local signalCodes = {
     upload = {0, 1, 2, 3}, play = {3, 2, 1, 0}, list = {0, 2, 3, 1},
     load = {1, 0, 3, 2}, rename = {2, 3, 0, 1}, retry = {3, 0, 1, 2},
     receiving = {1, 3, 0, 2},
+    gallery = {0, 3, 1, 2}, download = {3, 1, 2, 0},
 }
 local markerSquares = {}
 local stockSquares = {}
@@ -41,6 +45,10 @@ local playable = false
 local retryable = false
 local entries = {}
 local page, pageCount = 1, 1
+local galleryEntries = {}
+local galleryPage, galleryPageCount = 1, 1
+local tab = "library"
+local libraryPageSize, galleryPageSize = 4, 6
 local selectedId
 local loadedId
 local queuedPage
@@ -91,6 +99,23 @@ local libraryTitle = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 libraryTitle:SetPoint("TOPLEFT", panel, "TOPLEFT", 25, -87)
 libraryTitle:SetText("My dances")
 
+local libraryTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+libraryTab:SetSize(100, 22)
+libraryTab:SetPoint("TOPLEFT", panel, "TOPLEFT", 24, -82)
+libraryTab:SetText("My dances")
+
+local galleryTab = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+galleryTab:SetSize(100, 22)
+galleryTab:SetPoint("LEFT", libraryTab, "RIGHT", 6, 0)
+galleryTab:SetText("Gallery")
+
+if unifiedClient then
+    libraryTitle:Hide()
+else
+    libraryTab:Hide()
+    galleryTab:Hide()
+end
+
 local previous = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 previous:SetSize(26, 22)
 previous:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -111, -82)
@@ -109,7 +134,7 @@ emptyLabel:SetPoint("TOP", panel, "TOP", 0, -164)
 emptyLabel:SetText("No saved dances yet.")
 
 local rows = {}
-for index = 1, 4 do
+for index = 1, galleryPageSize do
     local row = CreateFrame("Button", nil, panel)
     row:SetSize(424, 25)
     row:SetPoint("TOPLEFT", panel, "TOPLEFT", 24, -113 - (index - 1) * 28)
@@ -200,13 +225,18 @@ end
 
 local function refreshControls()
     local available = not pending and not receiveDeadline
+    local inGallery = tab == "gallery"
+    local shownPage = inGallery and galleryPage or page
+    local shownPageCount = inGallery and galleryPageCount or pageCount
     setEnabled(upload, available)
     setEnabled(play, available and playable and not libraryRefreshUntil)
-    setEnabled(previous, available and page > 1)
-    setEnabled(nextPage, available and page < pageCount)
+    setEnabled(libraryTab, available)
+    setEnabled(galleryTab, available)
+    setEnabled(previous, available and shownPage > 1)
+    setEnabled(nextPage, available and shownPage < shownPageCount)
     setEnabled(rename, available and selectedId and nameInput:GetText():find("%S"))
     setEnabled(retry, available and retryable)
-    if retryable then retry:Show() else retry:Hide() end
+    if retryable and not inGallery then retry:Show() else retry:Hide() end
     for _, row in ipairs(rows) do
         setEnabled(row, available)
     end
@@ -231,24 +261,38 @@ local function selectEntry(entry)
     refreshControls()
 end
 
-local function renderLibrary()
-    pageLabel:SetText(string.format("%d / %d", page, pageCount))
-    if #entries == 0 then emptyLabel:Show() else emptyLabel:Hide() end
+local function renderEntries()
+    local inGallery = tab == "gallery"
+    local shownEntries = inGallery and galleryEntries or entries
+    local shownPage = inGallery and galleryPage or page
+    local shownPageCount = inGallery and galleryPageCount or pageCount
+    pageLabel:SetText(string.format("%d / %d", shownPage, shownPageCount))
+    emptyLabel:SetText(inGallery and "No dances in the gallery yet." or "No saved dances yet.")
+    if #shownEntries == 0 then emptyLabel:Show() else emptyLabel:Hide() end
     local selected
     for index, row in ipairs(rows) do
-        local entry = entries[index]
+        local entry = shownEntries[index]
         row.entry = entry
         if entry then
             row.label:SetText((entry.name:gsub("|", "||")))
-            row.duration:SetText(string.format("%.1fs", entry.duration / 1000))
+            if inGallery then
+                row.label:SetTextColor(1, 1, 1)
+                row.duration:SetText("Download")
+                row.duration:SetTextColor(1, 0.82, 0)
+            else
+                row.duration:SetText(string.format("%.1fs", entry.duration / 1000))
+                row.duration:SetTextColor(0.5, 0.5, 0.5)
+                if entry.id == (selectLoaded and loadedId or selectedId) then selected = entry end
+            end
             row:Show()
-            if entry.id == (selectLoaded and loadedId or selectedId) then selected = entry end
         else
             row:Hide()
         end
     end
-    selectLoaded = false
-    selectEntry(selected)
+    if not inGallery then
+        selectLoaded = false
+        selectEntry(selected)
+    end
 end
 
 local function endRequest()
@@ -268,6 +312,27 @@ local function beginRequest(action, payload, nextState, id)
     end
     showSignal(action, payload)
     showState(nextState)
+end
+
+local function requestPage(offset)
+    if tab == "gallery" then
+        beginRequest("gallery", tostring(galleryPage + offset), "gallery")
+    else
+        beginRequest("list", tostring(page + offset), "library")
+    end
+end
+
+local function showTab(nextTab)
+    if pending or receiveDeadline then return end
+    tab = nextTab
+    queuedPage = nil
+    nameInput:ClearFocus()
+    for _, control in ipairs({nameInput, nameLabel, rename, upload, play}) do
+        if tab == "gallery" then control:Hide() else control:Show() end
+    end
+    showState(tab == "gallery" and "galleryReady" or (playable and "ready" or "idle"))
+    renderEntries()
+    requestPage(0)
 end
 
 local function onBridgeStatus(nextState)
@@ -297,8 +362,8 @@ local function decodeHex(value)
     return (value:gsub("..", function(pair) return string.char(tonumber(pair, 16)) end))
 end
 
-local function validId(value)
-    return #value == 32 and not value:find("[^0-9a-f]")
+local function validId(value, length)
+    return #value == length and not value:find("[^0-9a-f]")
 end
 
 local function acceptPacket(packet)
@@ -311,12 +376,12 @@ local function acceptPacket(packet)
     end
     if incomingPage then
         incomingPage, incomingCount = tonumber(incomingPage), tonumber(incomingCount)
-        if incomingPage < 1 or incomingPage > incomingCount or activeId ~= "" and not validId(activeId) then return end
+        if incomingPage < 1 or incomingPage > incomingCount or activeId ~= "" and not validId(activeId, 32) then return end
         local list = {}
         for line in body:gmatch("[^\n]+") do
             local id, duration, encodedName = line:match("^([0-9a-f]+)|(%d+)|(%x+)$")
             local name = encodedName and decodeHex(encodedName)
-            if not id or not validId(id) or not name or #list >= #rows then return end
+            if not id or not validId(id, 32) or not name or #list >= libraryPageSize then return end
             list[#list + 1] = {id = id, duration = tonumber(duration), name = name}
         end
         entries, page, pageCount = list, incomingPage, incomingCount
@@ -333,7 +398,35 @@ local function acceptPacket(packet)
                 showState(oldState, wasRename and "Dance renamed." or nil)
             end
         end
-        renderLibrary()
+        if tab == "library" then renderEntries() else refreshControls() end
+        return true
+    end
+    local incomingGalleryPage, incomingGalleryCount = header:match("^gallery|(%d+)|(%d+)$")
+    if incomingGalleryPage then
+        if not pending or pending.action ~= "gallery" then return true end
+        incomingGalleryPage, incomingGalleryCount = tonumber(incomingGalleryPage), tonumber(incomingGalleryCount)
+        if incomingGalleryPage < 1 or incomingGalleryPage > incomingGalleryCount then return end
+        local list = {}
+        for line in body:gmatch("[^\n]+") do
+            local id, encodedName = line:match("^([0-9a-f]+)|(%x+)$")
+            local name = encodedName and decodeHex(encodedName)
+            if not id or not validId(id, 64) or not name or #name > maxNameBytes or #list >= galleryPageSize then return end
+            list[#list + 1] = {id = id, name = name}
+        end
+        galleryEntries, galleryPage, galleryPageCount = list, incomingGalleryPage, incomingGalleryCount
+        endRequest()
+        renderEntries()
+        showState("galleryReady")
+        return true
+    end
+    local encodedDownload = header:match("^download|(%x+)$")
+    if encodedDownload then
+        if not pending or pending.action ~= "download" then return true end
+        local name = decodeHex(encodedDownload)
+        if not name or #name > maxNameBytes or body ~= "" then return end
+        page = 1
+        endRequest()
+        showState("galleryReady", ("%s saved to My dances."):format(name:gsub("|", "||")))
         return true
     end
     local eligible, encodedMessage = header:match("^error|([01])|(%x+)$")
@@ -406,13 +499,19 @@ panel:SetScript("OnHide", function()
     queuedPage = nil
     nameInput:ClearFocus()
 end)
-panel:SetScript("OnShow", function() queuedPage = page end)
-previous:SetScript("OnClick", function() beginRequest("list", tostring(page - 1), "library") end)
-nextPage:SetScript("OnClick", function() beginRequest("list", tostring(page + 1), "library") end)
+panel:SetScript("OnShow", function() queuedPage = true end)
+libraryTab:SetScript("OnClick", function() showTab("library") end)
+galleryTab:SetScript("OnClick", function() showTab("gallery") end)
+previous:SetScript("OnClick", function() requestPage(-1) end)
+nextPage:SetScript("OnClick", function() requestPage(1) end)
 
 for _, row in ipairs(rows) do
     row:SetScript("OnClick", function(self)
         if not self.entry then return end
+        if tab == "gallery" then
+            beginRequest("download", self.entry.id, "downloading")
+            return
+        end
         selectEntry(self.entry)
         if playable and selectedId == loadedId then return end
         beginRequest("load", selectedId, "loading", selectedId)
@@ -491,7 +590,7 @@ local function bindBridge()
     bridgeBound = true
 end
 
-renderLibrary()
+renderEntries()
 showState("idle")
 
 loader:RegisterEvent("PLAYER_LOGIN")
@@ -546,9 +645,8 @@ loader:SetScript("OnUpdate", function()
         playDeadline = nil
     end
     if queuedPage and not pending and not receiveDeadline then
-        local requestedPage = queuedPage
         queuedPage = nil
-        beginRequest("list", tostring(requestedPage), "library")
+        requestPage(0)
     end
 end)
 

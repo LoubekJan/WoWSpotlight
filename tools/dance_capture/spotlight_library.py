@@ -106,10 +106,28 @@ class DanceLibrary:
         return sorted(result, key=lambda entry: (entry.created_at, entry.clip_id), reverse=True)
 
     def save(self, motion_path, name=None):
+        return self._save(read_clip(motion_path), name)
+
+    def import_dance(self, raw, name, expected_id):
+        return self._save(raw, name, expected_id=expected_id)
+
+    def _save(self, raw, name, *, expected_id=None):
         now = datetime.now(timezone.utc)
         name = dance_name(name) if name is not None else f"Dance {now.astimezone():%Y-%m-%d %H:%M:%S}"
-        raw = read_clip(motion_path)
         digest, duration, frames = inspect_motion(raw)
+        if expected_id is not None:
+            if digest != expected_id:
+                raise LibraryError("The downloaded dance does not match its gallery ID.")
+            for directory in self.directory.glob("*"):
+                if not ENTRY_ID.fullmatch(directory.name):
+                    continue
+                try:
+                    _, existing, existing_digest = self._load(directory.name)
+                    if existing_digest == digest:
+                        self.path_for(existing.clip_id)
+                        return existing
+                except LibraryError:
+                    continue
         entry = DanceEntry(uuid4().hex, name, now.isoformat(timespec="milliseconds"),
                            duration, frames)
         self.directory.mkdir(parents=True, exist_ok=True)

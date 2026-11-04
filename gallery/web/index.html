@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Procházej a stahuj tance z ComfyUI pro World of Warcraft 3.3.5a.">
+  <meta name="theme-color" content="#17151c">
+  <title>Galerie tanců · WoWSpotlight</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="site-header shell">
+    <a href="/" class="wordmark">
+      <svg aria-hidden="true" viewBox="0 0 32 32" width="32" height="32">
+        <path d="M16 2v28M2 16h28M6 6l20 20M6 26 26 6" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      WoW<span>Spotlight</span>
+    </a>
+    <span class="header-label">AI WORLD LAB</span>
+  </header>
+
+  <main class="shell">
+    <section class="hero" aria-labelledby="title">
+      <div class="hero-copy">
+        <p class="eyebrow"><span></span> POHYBOVÉ KLIPY Z COMFYUI</p>
+        <h1 id="title">Galerie<br><em>tanců</em></h1>
+        <p class="intro">Vyber si tanec pro World of Warcraft. Klip stáhneš tady nebo přímo ve hře na kartě <strong>Gallery</strong> v <code>/spotlight</code>.</p>
+        <a class="hero-link" href="#library">Procházet tance <span aria-hidden="true">↓</span></a>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <svg viewBox="0 0 500 345" fill="none">
+          <g class="art-guide" stroke="currentColor">
+            <path d="M2 39h496M2 100h496M2 161h496M2 222h496M2 283h496M67 1v343M128 1v343M189 1v343M250 1v343M311 1v343M372 1v343M433 1v343"/>
+            <ellipse cx="257" cy="270" rx="195" ry="48"/>
+            <path d="M62 270h390M257 17v303" stroke-dasharray="4 6"/>
+          </g>
+          <g class="art-echo" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="185" cy="85" r="19"/>
+            <path d="m179 108-6 61 26 43-17 64m-9-107-42 35-7 51m53-133-39 8-41-31m80 23 27 19 32-13"/>
+            <circle cx="325" cy="82" r="19"/>
+            <path d="m317 106 3 64 36 37 18 57m-54-94-35 47 1 56m33-150 40 3 43-28m-83 25-37 27-31-5"/>
+            <path d="M89 79c33-51 95-65 155-46M341 49c58-1 95 34 111 87M66 216c15 44 49 74 88 82"/>
+          </g>
+          <g class="art-dancer" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="255" cy="65" r="23"/>
+            <path d="m247 92 1 25 15 57m-15-57-48 15-48-37m96 22 46-18 25-37m-56 112-34 55-41 44m75-99 46 45 36 40"/>
+            <path d="m188 273-18 3m175-17 19 1M151 95l-13-13m181-20 7-14"/>
+            <path d="M96 218c22-28 67-39 124-30m70 1c68-25 120-23 148-3" stroke-width="1.5" stroke-dasharray="4 6"/>
+          </g>
+          <g class="art-joints" fill="currentColor">
+            <circle cx="248" cy="117" r="5"/><circle cx="200" cy="132" r="4"/><circle cx="294" cy="99" r="4"/>
+            <circle cx="263" cy="174" r="5"/><circle cx="229" cy="229" r="4"/><circle cx="309" cy="219" r="4"/>
+          </g>
+        </svg>
+        <span class="art-label">ILUSTRACE POHYBU</span>
+        <span class="art-index">01 — SPOTLIGHT</span>
+      </div>
+    </section>
+
+    <section id="library" class="library" aria-labelledby="library-title">
+      <header class="library-header">
+        <div>
+          <p class="eyebrow">KATALOG</p>
+          <h2 id="library-title">Dostupné tance</h2>
+        </div>
+        <button id="reload" class="outline-button" type="button">Obnovit <span aria-hidden="true">↻</span></button>
+      </header>
+      <p id="status" class="status" role="status">Načítám galerii…</p>
+      <noscript><p>Pro zobrazení galerie zapni v prohlížeči JavaScript.</p></noscript>
+      <ul id="dances" class="dances" aria-label="Tance" aria-busy="true"></ul>
+      <nav id="pagination" class="pagination" aria-label="Stránky katalogu" hidden>
+        <button id="previous" class="outline-button" type="button"><span aria-hidden="true">←</span> Předchozí</button>
+        <span id="page" aria-live="polite"></span>
+        <button id="next" class="outline-button" type="button">Další <span aria-hidden="true">→</span></button>
+      </nav>
+    </section>
+  </main>
+
+  <footer class="site-footer shell">
+    <span>WoWSpotlight</span>
+    <span>World of Warcraft 3.3.5a</span>
+  </footer>
+</body>
+</html>

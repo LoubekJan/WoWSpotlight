@@ -12,8 +12,10 @@ SIGNALS = {
     (2, 3, 0, 1): "rename",
     (3, 0, 1, 2): "retry",
     (1, 3, 0, 2): "receive",
+    (0, 3, 1, 2): "gallery",
+    (3, 1, 2, 0): "download",
 }
-PAYLOAD_SIGNALS = {"list", "load", "rename", "retry"}
+PAYLOAD_SIGNALS = {"list", "load", "rename", "retry", "gallery", "download"}
 STOCK_DANCE_SIGNAL = (2, 1, 0, 3)
 COLUMNS = 48
 MAX_NAME_BYTES = 96
@@ -70,3 +72,8 @@ def library_reply(entries, page, loaded, retryable):
 
 def error_reply(message, retryable):
     return f"error|{int(retryable)}|{hex_field(message)}"
+
+
+def gallery_reply(page, pages, dances):
+    return "~".join([f"gallery|{page}|{pages}",
+                     *(f"{dance.clip_id}|{hex_field(dance.name)}" for dance in dances)])

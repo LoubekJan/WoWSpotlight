@@ -17,6 +17,8 @@ MediaPipe v tomto PoC běží na CPU. Pokud ComfyUI obsluhuje GPU orchestrátor,
 2. Klikni na **Run**. Workflow použije prvních 17,7 sekundy a obraz podle potřeby zmenší do 1280 × 720 na šířku nebo 720 × 1280 na výšku. Výsledkem jsou lokální rotace 20 kostí pro lidskou mužskou postavu.
 3. V posledním uzlu klikni na **Download motion JSON**. Výstup se ukládá do `<ComfyUI>/output/spotlight/` jako `*.motion.json` ve formátu `wow-spotlight-motion`.
 
+Na AI World Labu importér průběžně publikuje hotové animace z této složky do společné galerie. Klipy z převodu spuštěného ve hře i z workflow v ComfyUI procházejí stejným importem. [Galerie Spotlight](gallery.md)
+
 ## Připojení hry
 
 Adresu vlastní instance předej pomocné aplikaci volbou `--comfy-url`, například `--comfy-url http://127.0.0.1:8188`. Při použití vlastní gateway musí `POST /api/upload/image` přijmout MP4 v poli `image` a `POST /api/prompt` musí umožnit uzlu `LoadVideo` hned použít nově nahraný soubor. Pomocná aplikace čeká na výsledek přes `GET /api/history/{id}` a stáhne JSON přes `GET /api/view`. Tyto cesty poskytuje i standardní ComfyUI 0.25.0. [API ComfyUI](https://github.com/Comfy-Org/ComfyUI/blob/v0.25.0/server.py) · [Uzel LoadVideo](https://github.com/Comfy-Org/ComfyUI/blob/v0.25.0/comfy_extras/nodes_video.py)

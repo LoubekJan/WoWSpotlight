@@ -1,0 +1,17 @@
+services:
+  comfy-import:
+    image: wowspotlight-gallery:local
+    pull_policy: never
+    user: "${SPOTLIGHT_COMFY_UID:-1000}:${SPOTLIGHT_COMFY_GID:-1000}"
+    entrypoint: [python, -m, gallery.import_comfy, --source, /comfy-output, --gallery-url, "http://gallery:8780"]
+    environment:
+      SPOTLIGHT_GALLERY_TOKEN: ${SPOTLIGHT_GALLERY_TOKEN:?Configure a gallery publishing token}
+    volumes:
+      - "${SPOTLIGHT_COMFY_OUTPUT:?Configure the shared ComfyUI Spotlight output directory}:/comfy-output:ro"
+    depends_on:
+      gallery:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
