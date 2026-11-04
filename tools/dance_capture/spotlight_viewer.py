@@ -12,25 +12,29 @@ from urllib.error import URLError
 
 if __package__:
     from . import client_poc, duet_assets, duet_runtime, duet_select, runtime_poc
-    from .spotlight_http import SLOT_MS, Relay, RelayError
+    from .spotlight_http import SLOT_MS, DanceEvent, Relay, RelayError
 else:
     import client_poc
     import duet_assets
     import duet_runtime
     import duet_select
     import runtime_poc
-    from spotlight_http import SLOT_MS, Relay, RelayError
+    from spotlight_http import SLOT_MS, DanceEvent, Relay, RelayError
 
 
 SLOTS = (client_poc.ANIMATION_ID, duet_assets.SECOND_ANIMATION_ID)
 POLL_SECONDS = 0.3
 NATIVE_DANCE = 10
+STOCK_DANCE_ANIMATION = 69
+
+
+def event_key(event):
+    return event.guid, event.event_id, event.started_at_ms, event.clip_id
 
 
 @dataclass
 class Assignment:
-    event_id: str
-    started_at_ms: int
+    event: DanceEvent
     slot: int
     synced_model: str | None = None
     next_sync: float = 0.0
@@ -46,6 +50,7 @@ class Viewer:
         self.local_guid = 0
         self.state = None
         self.assignments = {}
+        self.observed_emotes = {}
         self.retired = {}
         self.configured = ()
 
@@ -63,7 +68,7 @@ class Viewer:
             snapshot = duet_select.actor_snapshot(self.process, manager, guid)
             if (snapshot.get("active_animation") != slot
                     or snapshot.get("emote_state") == NATIVE_DANCE
-                    and duet_select.sync_actor(self.process, manager, guid, 69, 0)):
+                    and duet_select.sync_actor(self.process, manager, guid, STOCK_DANCE_ANIMATION, 0)):
                 del self.retired[slot]
 
     def tick(self):
@@ -74,17 +79,31 @@ class Viewer:
                 self.state = self.relay.state()
             except (OSError, RelayError, URLError) as error:
                 logging.warning("Could not read Spotlight relay: %s", error)
-        events = {}
+        events, snapshots = {}, {}
         if observer and self.state:
             now_ms = self.state.now_ms()
-            events = {e.guid: e for e in self.state.events
-                      if e.guid != observer and e.expires_at_ms > now_ms
-                      and duet_select.lookup_unit(self.process, manager, e.guid)}
+            live_events = {event_key(event): event for event in self.state.events if event.expires_at_ms > now_ms}
+            self.observed_emotes = {key: emote for key, emote in self.observed_emotes.items() if key in live_events}
+            for key, event in live_events.items():
+                guid = event.guid
+                previous_emote = self.observed_emotes.get(key)
+                if guid == observer or (previous_emote is not None and previous_emote != NATIVE_DANCE):
+                    continue
+                if not duet_select.lookup_unit(self.process, manager, guid):
+                    continue
+                if previous_emote == NATIVE_DANCE:
+                    snapshot = duet_select.actor_snapshot(self.process, manager, guid)
+                    emote = snapshot.get("emote_state")
+                    if emote is not None and emote != NATIVE_DANCE:
+                        self.observed_emotes[key] = emote
+                        logging.info("Observed the end of Spotlight event %s for 0x%016X.", event.event_id, guid)
+                        continue
+                    snapshots[guid] = snapshot
+                events[guid] = event
 
         for guid, assignment in tuple(self.assignments.items()):
             event = events.get(guid)
-            if (event is None or event.event_id != assignment.event_id
-                    or event.started_at_ms != assignment.started_at_ms):
+            if event is None or event_key(event) != event_key(assignment.event):
                 self.retired[assignment.slot] = guid
                 del self.assignments[guid]
         self.configure()
@@ -92,6 +111,8 @@ class Viewer:
 
         for guid, event in events.items():
             if guid not in self.assignments:
+                if guid in self.retired.values():
+                    continue  # Wait until the old native sequence has released its slot.
                 free = next((slot for slot in self.slots
                              if slot not in self.retired
                              and all(a.slot != slot for a in self.assignments.values())), None)
@@ -100,18 +121,24 @@ class Viewer:
                 try:
                     clip = self.relay.cached_clip(self.cache, event.clip_id)
                     report = self.runtime.apply(free, clip)
-                    logging.info("Loaded %s for 0x%016X in slot %d: %s", event.clip_id, guid, free, report)
+                    logging.info("Loaded event %s clip %s for 0x%016X in slot %d, baked SHA-256 %s.",
+                                 event.event_id, event.clip_id, guid, free, report["animation_sha256"])
                 except (OSError, RelayError, URLError, runtime_poc.TrackNotReadyError) as error:
                     logging.debug("Waiting for clip/slot %d: %s", free, error)
                     continue
                 if event.expires_at_ms <= self.state.now_ms():
                     continue
-                self.assignments[guid] = Assignment(event.event_id, event.started_at_ms, free)
+                self.assignments[guid] = Assignment(event, free)
                 self.configure()
             assignment = self.assignments[guid]
-            snapshot = duet_select.actor_snapshot(self.process, manager, guid)
+            snapshot = snapshots.get(guid)
+            if snapshot is None:
+                snapshot = duet_select.actor_snapshot(self.process, manager, guid)
             model = snapshot.get("model")
-            if not model or snapshot.get("emote_state") != NATIVE_DANCE or snapshot.get("stand_state") != 0:
+            dancing = snapshot.get("emote_state") == NATIVE_DANCE and snapshot.get("stand_state") == 0
+            if dancing:
+                self.observed_emotes[event_key(event)] = NATIVE_DANCE
+            if not model or not dancing:
                 assignment.synced_model = None
                 continue
             if (model != assignment.synced_model or snapshot.get("active_animation") != assignment.slot):

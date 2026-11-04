@@ -1,6 +1,7 @@
 local modelPath = "Character\\Human\\Male\\HumanMale.m2"
 local loader = CreateFrame("Frame", nil, UIParent)
 local panel = CreateFrame("Frame", "SpotlightDancePanel", UIParent)
+local unifiedClient = GetAddOnMetadata("SpotlightDanceLab", "X-Spotlight-Unified") == "1"
 local states = {
     idle = "Choose a dance video from your computer.",
     waiting = "Waiting for Spotlight to open the file picker...",
@@ -16,6 +17,7 @@ local states = {
 }
 local bridgeStates = {"selecting", "uploading", "processing", "ready", "error", "cancelled"}
 local signalMarker = CreateFrame("Frame", nil, UIParent)
+local stockMarker = CreateFrame("Frame", nil, UIParent)
 local markerColors = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {1, 0, 1}}
 local signalCodes = {
     upload = {0, 1, 2, 3}, play = {3, 2, 1, 0}, list = {0, 2, 3, 1},
@@ -23,12 +25,15 @@ local signalCodes = {
     receiving = {1, 3, 0, 2},
 }
 local markerSquares = {}
+local stockSquares = {}
 local payloadSquares = {}
 local payloadCount = 0
 local state = "idle"
 local pending
 local requestDeadline
 local playDeadline
+local stockDeadline
+local spotlightEmote, spotlightPlayed = false, false
 local receiveDeadline
 local libraryRefreshUntil
 local bridgeBound = false
@@ -46,10 +51,15 @@ signalMarker:SetAllPoints(UIParent)
 signalMarker:SetFrameStrata("TOOLTIP")
 signalMarker:EnableMouse(false)
 signalMarker:Hide()
+stockMarker:SetAllPoints(UIParent)
+stockMarker:SetFrameStrata("TOOLTIP")
+stockMarker:EnableMouse(false)
+stockMarker:Hide()
 for index, color in ipairs(markerColors) do
     local square = signalMarker:CreateTexture(nil, "OVERLAY")
     square:SetTexture(color[1], color[2], color[3], 1)
     markerSquares[index] = square
+    stockSquares[index] = stockMarker:CreateTexture(nil, "OVERLAY")
 end
 
 panel:SetSize(472, 348)
@@ -432,11 +442,33 @@ retry:SetScript("OnClick", function() beginRequest("retry", "", "waiting") end)
 play:SetScript("OnClick", function()
     if playable and not pending and not receiveDeadline and not libraryRefreshUntil then
         panel:Hide()
+        spotlightEmote = true
+        spotlightPlayed = true
+        stockMarker:Hide()
+        stockDeadline = nil
         DoEmote("DANCE")
+        spotlightEmote = false
         playDeadline = GetTime() + 1.5
         showSignal("play")
     end
 end)
+
+if unifiedClient then
+    hooksecurefunc("DoEmote", function(emote)
+        if not spotlightPlayed or spotlightEmote or type(emote) ~= "string" or emote:upper() ~= "DANCE" then return end
+        spotlightPlayed = false
+        if playDeadline then
+            signalMarker:Hide()
+            playDeadline = nil
+        end
+        local width, height = UIParent:GetWidth(), UIParent:GetHeight()
+        for index, color in ipairs({2, 1, 0, 3}) do
+            paintSquare(stockSquares[index], color, width, height, (index + 5) * 0.01, 0.02, 0.008, 0.014)
+        end
+        stockMarker:Show()
+        stockDeadline = GetTime() + 1.5
+    end)
+end
 
 local function bindBridge()
     if bridgeBound then return end
@@ -462,13 +494,15 @@ end
 renderLibrary()
 showState("idle")
 
-local unifiedClient = GetAddOnMetadata("SpotlightDanceLab", "X-Spotlight-Unified") == "1"
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("PLAYER_LOGOUT")
 loader:SetScript("OnEvent", function(self, event)
     if event == "PLAYER_LOGOUT" then
         endRequest()
         closeInbox()
+        stockMarker:Hide()
+        stockDeadline = nil
+        spotlightPlayed = false
         return
     elseif event == "PLAYER_REGEN_ENABLED" then
         self:UnregisterEvent(event)
@@ -494,6 +528,10 @@ end)
 
 loader:SetScript("OnUpdate", function()
     local now = GetTime()
+    if stockDeadline and now >= stockDeadline then
+        stockMarker:Hide()
+        stockDeadline = nil
+    end
     if receiveDeadline and now >= receiveDeadline then closeInbox() end
     if libraryRefreshUntil and now >= libraryRefreshUntil then
         libraryRefreshUntil = nil

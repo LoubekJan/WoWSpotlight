@@ -33,9 +33,13 @@ class Publication:
     event_id: str
 
 
-def local_dance(process):
+def local_dance(process, *, animation=None):
     manager = duet_select.object_manager(process)
     guid = duet_select.active_guid(process)
+    if animation is not None:
+        snapshot = duet_select.actor_snapshot(process, manager, guid) if guid else {}
+        return guid, (snapshot.get("emote_state") == DANCE_EMOTE and snapshot.get("stand_state") == 0
+                      and snapshot.get("active_animation") == animation)
     unit = duet_select.lookup_unit(process, manager, guid) if guid else 0
     emote, stand = duet_select.unit_emote(process, unit)
     return guid, emote == DANCE_EMOTE and stand == 0
@@ -49,9 +53,10 @@ def read_token(path):
 
 
 class Publisher:
-    def __init__(self, relay, *, follow_emote=False):
+    def __init__(self, relay, *, follow_emote=False, animation=None):
         self.relay = relay
         self.follow_emote = follow_emote
+        self.animation = animation
         self.requests = SimpleQueue()
         self.closed = Event()
 
@@ -60,6 +65,9 @@ class Publisher:
 
     def play(self):
         self.requests.put(("play", None))
+
+    def stop_playback(self):
+        self.requests.put(("stop", None))
 
     def close(self):
         self.closed.set()
@@ -80,13 +88,15 @@ class Publisher:
             with runtime_poc.ClientProcess(pid, executable, rights=duet_select.PROCESS_READ_RIGHTS) as process:
                 while not self.closed.is_set():
                     try:
-                        guid, dancing = local_dance(process)
+                        guid, dancing = local_dance(process, animation=self.animation)
                     except READ_ERRORS:
                         if process.read(duet_select.IMAGE_BASE, 2) != b"MZ" or self.closed.wait(POLL_SECONDS):
                             break
                         continue
-                    play = self.follow_emote and dancing and not was_dancing
+                    follow = self.follow_emote and dancing and not was_dancing
                     was_dancing = dancing
+                    requested = None
+                    stopped = False
                     while True:
                         try:
                             command, value = self.requests.get_nowait()
@@ -94,20 +104,32 @@ class Publisher:
                             break
                         if command == "prepare":
                             prepared = value
-                        else:
-                            play = True
+                        elif command == "play":
+                            follow = False
+                            requested = prepared
+                        elif command == "stop":
+                            follow = False
+                            requested = None
+                            stopped = True
                     now = monotonic()
-                    if (play and prepared and prepared[0] == guid and pending is None
-                            and (current is None or (current.guid, current.clip_id) != prepared)):
+                    play = prepared and prepared[0] == guid and (follow or requested == prepared)
+                    replacing = play or pending and (pending.guid, pending.clip_id) == prepared
+                    if current and (stopped or not dancing or current.guid != guid
+                                    or (current.guid, current.clip_id) != prepared and not replacing):
+                        self.stop(current)
+                        current = None
+                    expired = now >= pending_until and (self.animation is not None or not dancing)
+                    if pending and (stopped or play or pending.guid != guid or expired
+                                    or (pending.guid, pending.clip_id) != prepared):
+                        self.stop(pending)
+                        pending = None
+                        if current and not play:
+                            self.stop(current)
+                            current = None
+                    if play:
                         pending = Publication(guid, prepared[1], uuid4().hex)
                         pending_until = now + 5
                         publish_after = now
-                    if current and (current.guid != guid or not dancing):
-                        self.stop(current)
-                        current = None
-                    if pending and (pending.guid != guid or not dancing and now >= pending_until):
-                        self.stop(pending)
-                        pending = None
                     publication = pending or current
                     if publication and dancing and now >= publish_after:
                         try:
@@ -117,6 +139,8 @@ class Publisher:
                         except NETWORK_ERRORS as error:
                             if isinstance(error, RelayError) and error.code in (401, 403, 409):
                                 logging.error("Shared dance rejected: %s", error)
+                                if current and current != publication:
+                                    self.stop(current)
                                 pending = current = None
                             else:
                                 logging.warning("Could not publish shared dance: %s", error)

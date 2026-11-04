@@ -24,7 +24,7 @@ from spotlight_comfy import DEFAULT_COMFY_URL, run_comfy_video
 from spotlight_http import Relay
 from spotlight_ipc import (
     MAX_REPLY_BYTES, PAYLOAD_HEIGHT, PAYLOAD_SIGNALS, PAYLOAD_WIDTH, SIGNALS,
-    color_index, error_reply, library_reply, read_payload,
+    STOCK_DANCE_SIGNAL, color_index, error_reply, library_reply, read_payload,
 )
 from spotlight_library import DanceLibrary
 from spotlight_publish import Publisher, local_dance, read_token
@@ -183,25 +183,26 @@ class GameWindow:
 
     def request_signal(self, hwnd, previous):
         if self.user.GetForegroundWindow() != hwnd:
-            return None, None
+            return None, None, False
         rect, origin = wintypes.RECT(), wintypes.POINT()
         if not self.user.GetClientRect(hwnd, ctypes.byref(rect)) or not self.user.ClientToScreen(hwnd, ctypes.byref(origin)):
-            return None, None
+            return None, None, False
         width, height = rect.right - rect.left, rect.bottom - rect.top
         dc = self.user.GetDC(None)
         if not dc:
-            return None, None
+            return None, None, False
         try:
             def sample(x, y):
                 return color_index(self.gdi.GetPixel(dc, origin.x + round(width * x), origin.y + round(height * y)))
 
             signal = SIGNALS.get(tuple(sample(index / 100, 0.02) for index in range(1, 5)))
+            stock = tuple(sample(index / 100, 0.02) for index in range(6, 10)) == STOCK_DANCE_SIGNAL
             if signal in PAYLOAD_SIGNALS and signal != previous:
                 try:
-                    return signal, self.capture_payload(hwnd, dc, origin, width, height, signal)
+                    return signal, self.capture_payload(hwnd, dc, origin, width, height, signal), stock
                 except ValueError:
-                    return None, None
-            return signal, None
+                    return None, None, stock
+            return signal, None, stock
         finally:
             self.user.ReleaseDC(None, dc)
 
@@ -257,6 +258,7 @@ class SpotlightBridge:
         self.status = None
         self.last_window = None
         self.signal_visible = None
+        self.stock_visible = False
         self.replies = deque()
         self.reply_started = None
         self.reply_attempts = 0
@@ -281,7 +283,7 @@ class SpotlightBridge:
         current, dancing = self.player(pid, emote=True)
         if current != guid:
             raise ValueError("The active character changed. Open Spotlight again on the intended character.")
-        if dancing and self.publisher:
+        if dancing and self.publisher and not self.session:
             raise ValueError("Move to stop the current dance before loading another one.")
         active = self.client_dir / "Spotlight" / "active.pose.json"
         with TemporaryDirectory(dir=active.parent) as work:
@@ -460,14 +462,20 @@ class SpotlightBridge:
                         self.status = value
                     else:
                         self.replies.append(value)
-            signal, payload = self.game.request_signal(hwnd, self.signal_visible)
+            signal, payload, stock = self.game.request_signal(hwnd, self.signal_visible)
             new_signal = guid and signal != self.signal_visible
+            if stock and not self.stock_visible and guid and self.session:
+                self.session.request_playback(guid, False, self.publisher.stop_playback if self.publisher else None)
+            self.stock_visible = stock
             if signal == "upload" and new_signal and not self.busy and self.status is None:
                 self.busy = True
                 self.status = "selecting"
                 self.root.after(250, lambda: self.choose(hwnd, pid, guid))
-            elif signal == "play" and new_signal and self.publisher and self.loaded_clip and self.loaded_clip[0] == guid:
-                self.publisher.play()
+            elif signal == "play" and new_signal and not stock and self.loaded_clip and self.loaded_clip[0] == guid:
+                if self.session:
+                    self.session.request_playback(guid, True, self.publisher.play if self.publisher else None)
+                elif self.publisher:
+                    self.publisher.play()
             elif signal in PAYLOAD_SIGNALS and new_signal and not self.busy:
                 self.busy = True
                 Thread(target=self.work, args=(signal, payload, pid, guid), daemon=True).start()
@@ -510,7 +518,8 @@ def main(argv=None, *, session_factory=None, game_pid=None):
         if not runtime_poc.is_verified_executable(executable):
             raise ValueError("Spotlight potřebuje původní WoW 3.3.5a enUS (build 12340) nebo ověřenou variantu klienta.")
         if args.relay_url:
-            publisher = Publisher(Relay(args.relay_url, read_token(args.relay_token_file)))
+            publisher = Publisher(Relay(args.relay_url, read_token(args.relay_token_file)),
+                                  animation=client_poc.ANIMATION_ID if session_factory else None)
         logs = client_dir / "Logs"
         logs.mkdir(exist_ok=True)
         logging.basicConfig(filename=logs / "SpotlightBridge.log", encoding="utf-8", level=logging.INFO,

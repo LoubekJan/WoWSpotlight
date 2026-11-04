@@ -14,6 +14,7 @@ SIGNALS = {
     (1, 3, 0, 2): "receive",
 }
 PAYLOAD_SIGNALS = {"list", "load", "rename", "retry"}
+STOCK_DANCE_SIGNAL = (2, 1, 0, 3)
 COLUMNS = 48
 MAX_NAME_BYTES = 96
 MAX_REQUEST_BYTES = 32 + 1 + MAX_NAME_BYTES

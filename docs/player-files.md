@@ -7,6 +7,8 @@ Spotlight přijímá původní podepsaný `WoW.exe` pro enUS build 12340 a ově�
 1. Vypni čistou kopii WoW **3.3.5a enUS build 12340**. Zkopíruj celý **obsah** složky `player-files` tam, kde je `WoW.exe`. `Data\enUS\realmlist.wtf` nastaví připojení k AI World Lab.
 2. Spusť `WoW.exe`, přihlas se za lidskou mužskou postavu a použij režim okna. Zadej `/spotlight`, vyber **Upload video** a po zpracování použij **Play dance**. Sdílené tance postav v dosahu na stejném realmu se načítají automaticky.
 
+Vlastní tanec spustíš tlačítkem **Play dance**. Příkaz `/dance` přehraje běžný tanec WoW i po načtení vlastního klipu. Každý klient má prostor pro vlastní tanec a dva současně sledované tanečníky.
+
 Složka klienta po zkopírování obsahuje tyto nové soubory a adresáře.
 
 ```text
