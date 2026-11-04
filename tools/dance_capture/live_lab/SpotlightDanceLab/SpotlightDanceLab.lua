@@ -187,13 +187,14 @@ local function paintSquare(square, colorIndex, width, height, x, y, cellWidth, c
     local color = markerColors[colorIndex + 1]
     square:SetTexture(color[1], color[2], color[3], 1)
     square:ClearAllPoints()
-    square:SetSize(width * cellWidth, height * cellHeight)
+    local side = math.min(width * cellWidth, height * cellHeight, height * 0.005)
+    square:SetSize(side, side)
     square:SetPoint("CENTER", UIParent, "TOPLEFT", width * x, -height * y)
     square:Show()
 end
 
 local function showSignal(action, payload)
-    proofSignalUntil = action == "proof" and GetTime() + 1.5 or nil
+    proofSignalUntil = action == "proof" and GetTime() + 0.65 or nil
     local width, height = UIParent:GetWidth(), UIParent:GetHeight()
     for index, square in ipairs(markerSquares) do
         paintSquare(square, signalCodes[action][index], width, height, index * 0.01, 0.02, 0.008, 0.014)
@@ -367,6 +368,32 @@ end
 
 local function validId(value, length)
     return #value == length and not value:find("[^0-9a-f]")
+end
+
+local function realmNonce(message)
+    local nonce = type(message) == "string" and message:match("^WSAUTH1([0-9a-f]+)$")
+    if nonce and validId(nonce, 48) then return nonce end
+end
+
+if unifiedClient and UIErrorsFrame then
+    local onEvent = UIErrorsFrame:GetScript("OnEvent")
+    if onEvent then
+        local hideBannerUntil
+        UIErrorsFrame:SetScript("OnEvent", function(self, event, ...)
+            if event == "UI_INFO_MESSAGE" then
+                local message = ...
+                if realmNonce(message) then
+                    hideBannerUntil = GetTime() + 0.5
+                    return
+                end
+                local isProofBanner = hideBannerUntil and GetTime() <= hideBannerUntil
+                    and message == "|cffff0000[Message from administrator]:|r"
+                hideBannerUntil = nil
+                if isProofBanner then return end
+            end
+            onEvent(self, event, ...)
+        end)
+    end
 end
 
 local function finishProof()
@@ -623,8 +650,8 @@ loader:SetScript("OnEvent", function(self, event, message)
         activeProof, queuedProof, proofSignalUntil = nil, nil, nil
         return
     elseif event == "UI_INFO_MESSAGE" then
-        local nonce = type(message) == "string" and message:match("^WSAUTH1([0-9a-f]+)$")
-        if nonce and validId(nonce, 48) and (not activeProof or activeProof.nonce ~= nonce) then
+        local nonce = realmNonce(message)
+        if nonce and (not activeProof or activeProof.nonce ~= nonce) then
             local now = GetTime()
             local proof = {nonce = nonce, retryAt = now, expiresAt = now + 65}
             if activeProof and activeProof.sent then queuedProof = proof else activeProof = proof end
@@ -683,7 +710,7 @@ loader:SetScript("OnUpdate", function()
     if activeProof and not pending and not receiveDeadline and not playDeadline and now >= activeProof.retryAt then
         showSignal("proof", activeProof.nonce)
         activeProof.sent = true
-        activeProof.retryAt = now + 2
+        activeProof.retryAt = now + 4
     end
 end)
 

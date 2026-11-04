@@ -158,7 +158,7 @@ class Publisher:
                     if guid != challenge_guid:
                         challenge_guid, challenge_after = guid, now
                     relay = self.relay_for(guid)
-                    if self.realm_auth and guid and not relay and now >= challenge_after:
+                    if self.realm_auth and prepared and prepared[0] == guid and not relay and now >= challenge_after:
                         challenge_after = now + CHALLENGE_RETRY_SECONDS
                         try:
                             self.relay.challenge(guid)

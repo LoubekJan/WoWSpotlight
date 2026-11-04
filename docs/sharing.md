@@ -6,7 +6,7 @@ Po kliknutí na **Play dance** klient přehraje vlastní klip a oznámí jeho za
 - **ID přehrání** vznikne při každém spuštění, i když hráč znovu použije stejný klip. Služba k němu přiřadí GUID tanečníka a čas začátku. Podle něj naváže divák, který dorazí později, na aktuální část smyčky.
 - **Sloty animací** jsou 69 pro běžný `/dance`, 211 pro vlastní tanec a 154 a 155 pro dva současně sledované tanečníky. Načtení klipu pouze připraví slot 211. Pohybem hráč ukončí vlastní tanec a sdílení. Příkaz `/dance` přepne na běžný tanec a ukončí sdílení.
 
-V jednom klientu WoWSpotlight probíhá tvorba i sledování tanců automaticky po startu hry. Na AI World Labu klient získá oprávnění ke sdílení pro právě přihlášenou postavu. Realm doručí jednorázový ověřovací kód jen této postavě a doplněk jej předá pomocné aplikaci. Následující kroky patří k dřívější zkoušce s oddělenými klienty a ručními tokeny. [Společný klient](player-files.md)
+V jednom klientu WoWSpotlight probíhá tvorba i sledování tanců automaticky po startu hry. Na AI World Labu si klient po načtení klipu k přehrání vyžádá oprávnění ke sdílení pro právě přihlášenou postavu. Realm jí doručí jednorázový ověřovací kód a doplněk jej předá pomocné aplikaci na pozadí. Následující kroky patří k dřívější zkoušce s oddělenými klienty a ručními tokeny. [Společný klient](player-files.md)
 
 ## Tanečník
 
