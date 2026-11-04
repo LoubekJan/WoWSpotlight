@@ -49,7 +49,7 @@ class MemoryRegion(ctypes.Structure):
 
 
 class ClientProcess:
-    def __init__(self, pid, executable):
+    def __init__(self, pid, executable, *, rights=PROCESS_RIGHTS):
         if os.name != "nt" or ctypes.sizeof(ctypes.c_void_p) != 8:
             raise ValueError("Use 64-bit Python on Windows for the isolated 32-bit client.")
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -75,7 +75,7 @@ class ClientProcess:
         self.write_memory.argtypes = memory_arguments
         self.write_memory.restype = wintypes.BOOL
 
-        self.handle = self.open(PROCESS_RIGHTS, False, pid)
+        self.handle = self.open(rights, False, pid)
         if not self.handle:
             raise ctypes.WinError(ctypes.get_last_error())
         try:
