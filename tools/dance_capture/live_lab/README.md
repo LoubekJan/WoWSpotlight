@@ -10,8 +10,8 @@
    ```powershell
    $actor = 'C:\WoWModding\SpotlightPoC\LiveActor'
    $observer = 'C:\WoWModding\SpotlightPoC\LiveObserver' # Pro jediného hráče použij $null.
-   New-Item -ItemType Directory -Force '.\artifacts' | Out-Null
-   $patch = Join-Path (Resolve-Path '.\artifacts') 'patch-enUS-Z.MPQ'
+   $package = New-Item -ItemType Directory -Force '.\artifacts\install\live\Data\enUS'
+   $patch = Join-Path $package.FullName 'patch-enUS-Z.MPQ'
    if (-not (Test-Path -LiteralPath $patch)) {
        py -3.12 -B '.\tools\dance_capture\live_setup.py' $patch --client-data (Join-Path $actor 'Data')
        if ($LASTEXITCODE -ne 0) { throw 'Sestavení klientského balíčku selhalo.' }

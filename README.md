@@ -21,6 +21,15 @@ Knihovna je ve složce klienta pod `Spotlight\library` a ukládá se zvlášť p
 
 ## První instalace
 
+Na AI World Lab jsou hotové instalační balíčky ve složce `C:\WoWSpotlight\artifacts\install`. Při vypnutém WoW zkopíruj zvolený soubor do nové kopie klienta.
+
+| Účel | Soubor ve složce `artifacts\install` | Kam v klientu |
+| --- | --- | --- |
+| Porovnání kvality na přihlašovací obrazovce | `preview\Data\patch-Z.MPQ` | `Data\patch-Z.MPQ` |
+| Tvorba tanců ve hře přes `/spotlight` | `live\Data\enUS\patch-enUS-Z.MPQ` | `Data\enUS\patch-enUS-Z.MPQ` |
+
+Složka `artifacts` obsahuje místní výstupy sestavené z dat klienta. Návody níže popisují sestavení vlastních balíčků z čerstvého klonu GitHubu.
+
 - [Příprava testovacího klienta a zkouška s druhým hráčem](tools/dance_capture/live_lab/README.md)
 - [Instalace uzlů a workflow v ComfyUI](docs/comfyui.md)
 - [Původní extraktor a náhled animace bez realmu](tools/dance_capture/README.md)
