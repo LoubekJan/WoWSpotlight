@@ -2,6 +2,8 @@
 
 Na AI World Lab jsou hotové soubory v `C:\WoWSpotlight\artifacts\player-files`. Stejný klient WoW umí vytvářet vlastní tance i přehrávat tance ostatních.
 
+Spotlight přijímá původní podepsaný `WoW.exe` pro enUS build 12340 a ověřené varianty stejného buildu. Před připojením kontroluje také animační data a instrukce klienta, které používá.
+
 1. Vypni čistou kopii WoW **3.3.5a enUS build 12340**. Zkopíruj celý **obsah** složky `player-files` tam, kde je `WoW.exe`. `Data\enUS\realmlist.wtf` nastaví připojení k AI World Lab.
 2. Spusť `WoW.exe`, přihlas se za lidskou mužskou postavu a použij režim okna. Zadej `/spotlight`, vyber **Upload video** a po zpracování použij **Play dance**. Sdílené tance postav v dosahu na stejném realmu se načítají automaticky.
 

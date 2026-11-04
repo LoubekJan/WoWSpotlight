@@ -24,8 +24,8 @@ class DuetRuntime:
         if (self.client_dir / "SpotlightDuet.lab").read_text(encoding="ascii").strip() != duet_select.MARKER:
             raise ValueError("The selected client is missing the duet lab marker.")
         self.executable = self.client_dir / "WoW.exe"
-        if sha256(self.executable.read_bytes()).hexdigest() != runtime_poc.CLIENT_HASH:
-            raise ValueError("The executable does not match the verified 3.3.5a lab build.")
+        if not runtime_poc.is_verified_executable(self.executable):
+            raise ValueError("The executable does not match a verified WoW 3.3.5a build 12340.")
 
         spec = spec_from_file_location("spotlight_duet_stormlib", stormlib_module)
         if spec is None or spec.loader is None:

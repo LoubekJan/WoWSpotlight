@@ -18,6 +18,11 @@ else:
 
 
 CLIENT_HASH = "28287cd94e6ab2d6e68865f49314b456d2750dcb5d0b8ecca12eeddf72b7bf80"
+VERIFIED_CLIENT_HASHES = frozenset((
+    CLIENT_HASH,
+    "aa63a5750d60ef16746c686b3d5e26876d98953eab08b1c026cd0faf78e88cb8",  # Original signed enUS 12340.
+    "bf644876709c591acc17c0da8cdf1814edcc9f1e6bc109a8c0d5c38c79dc953c",  # Verified 12340 private-realm client.
+))
 DEFAULT_CLIENT = Path(r"C:\WoWModding\SpotlightPoC\LiveActor")
 PROCESS_RIGHTS = 0x0400 | 0x0020 | 0x0010 | 0x0008  # query, VM write/read/operation
 MEM_COMMIT = 0x1000
@@ -33,6 +38,10 @@ class TrackNotReadyError(ValueError):
 
 class PoseClipError(ValueError):
     """The selected pose file cannot be converted to the animation track."""
+
+
+def is_verified_executable(executable):
+    return sha256(executable.read_bytes()).hexdigest() in VERIFIED_CLIENT_HASHES
 
 
 class MemoryRegion(ctypes.Structure):
@@ -205,8 +214,8 @@ def apply(pid, client_dir, pose_path, stormlib_module):
     if client_dir == client_poc.DEFAULT_DATA.resolve().parent:
         raise ValueError("Select the isolated Spotlight client copy.")
     executable = client_dir / "WoW.exe"
-    if sha256(executable.read_bytes()).hexdigest() != CLIENT_HASH:
-        raise ValueError("The executable does not match the verified 3.3.5a lab build.")
+    if not is_verified_executable(executable):
+        raise ValueError("The executable does not match a verified WoW 3.3.5a build 12340.")
     spec = spec_from_file_location("dance_runtime_stormlib", stormlib_module)
     if spec is None or spec.loader is None:
         raise ImportError("Pass the path to the StormLib Python wrapper.")

@@ -497,8 +497,8 @@ def main(argv=None, *, session_factory=None, game_pid=None):
     try:
         if client_dir == client_poc.DEFAULT_DATA.resolve().parent:
             raise ValueError("Použij oddělenou testovací kopii WoW.")
-        if sha256(executable.read_bytes()).hexdigest() != runtime_poc.CLIENT_HASH:
-            raise ValueError("Tato kopie WoW neodpovídá ověřenému buildu 12340.")
+        if not runtime_poc.is_verified_executable(executable):
+            raise ValueError("Spotlight potřebuje původní WoW 3.3.5a enUS (build 12340) nebo ověřenou variantu klienta.")
         if args.relay_url:
             publisher = Publisher(Relay(args.relay_url, read_token(args.relay_token_file)))
         logs = client_dir / "Logs"

@@ -3,7 +3,6 @@
 import argparse
 import ctypes
 from ctypes import wintypes
-from hashlib import sha256
 import json
 from pathlib import Path
 import struct
@@ -548,8 +547,8 @@ def verified_executable(client_dir):
     if client_dir == client_poc.DEFAULT_DATA.resolve().parent:
         raise ValueError("Select the isolated duet client copy.")
     executable = client_dir / "WoW.exe"
-    if sha256(executable.read_bytes()).hexdigest() != runtime_poc.CLIENT_HASH:
-        raise ValueError("The executable does not match the verified 3.3.5a lab build.")
+    if not runtime_poc.is_verified_executable(executable):
+        raise ValueError("The executable does not match a verified WoW 3.3.5a build 12340.")
     return executable
 
 
