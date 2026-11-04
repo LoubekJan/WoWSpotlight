@@ -25,7 +25,7 @@ Spotlight\
 
 `Spotlight` obsahuje přibalený Python a potřebné knihovny. `dinput8.dll` při spuštění hry předá požadavky DirectInput systémové knihovně a na pozadí spustí Spotlight. Stav pomocné části se zapisuje do `Logs\SpotlightBridge.log` v klientu.
 
-Pro **sdílení vlastního tance** správce přiřadí token k GUID dané postavy a před předáním jej přidá do `Spotlight\relay.token` v souborech pro konkrétního hráče. Hráč může vytvářet vlastní tance pro sebe i sledovat ostatní už se základní sadou souborů. [Nastavení sdílecí služby](sharing.md#nastavení-služby-spotlight)
+Na AI World Labu se klient pro **sdílení vlastního tance** automaticky ověří přes právě přihlášenou postavu. Oba hráči mohou použít stejný balíček. Volba `--no-relay-realm-auth` při sestavení zachová původní ruční nastavení pro lab se samostatnými tokeny. [Nastavení sdílecí služby](sharing.md#nastavení-služby-spotlight)
 
 ## Sestavení souborů pro lab
 

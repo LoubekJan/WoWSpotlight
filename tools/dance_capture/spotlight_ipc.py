@@ -14,8 +14,9 @@ SIGNALS = {
     (1, 3, 0, 2): "receive",
     (0, 3, 1, 2): "gallery",
     (3, 1, 2, 0): "download",
+    (1, 2, 0, 3): "proof",
 }
-PAYLOAD_SIGNALS = {"list", "load", "rename", "retry", "gallery", "download"}
+PAYLOAD_SIGNALS = {"list", "load", "rename", "retry", "gallery", "download", "proof"}
 STOCK_DANCE_SIGNAL = (2, 1, 0, 3)
 COLUMNS = 48
 MAX_NAME_BYTES = 96

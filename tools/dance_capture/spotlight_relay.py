@@ -16,9 +16,11 @@ import time
 
 if __package__:
     from .client_poc import FULL_BODY_FORMAT, full_body_motion
+    from .spotlight_authorize import PROOF, ProofError, RealmAuthorization
     from .spotlight_comfy import SLOT_DURATION_MS
 else:
     from client_poc import FULL_BODY_FORMAT, full_body_motion
+    from spotlight_authorize import PROOF, ProofError, RealmAuthorization
     from spotlight_comfy import SLOT_DURATION_MS
 
 
@@ -28,7 +30,7 @@ DEFAULT_LEASE_MS = 60_000
 RETAINED_EVENTS_PER_ACTOR = 64
 CLIP_ID = re.compile(r"[0-9a-f]{64}")
 EVENT_ID = re.compile(r"[0-9a-f]{32}")
-ACTOR_ROUTE = re.compile(r"/actors/([^/]+)/(start|stop)")
+ACTOR_ROUTE = re.compile(r"/actors/([^/]+)/(start|stop|challenge|authorize)")
 TOKEN = re.compile(r"[A-Za-z0-9_-]{16,128}")
 LOG = logging.getLogger("spotlight.relay")
 
@@ -93,10 +95,11 @@ class Dance:
 
 
 class Relay:
-    def __init__(self, data_dir, actors, lease_ms=DEFAULT_LEASE_MS):
+    def __init__(self, data_dir, actors, lease_ms=DEFAULT_LEASE_MS, authorization=None):
         self.clip_dir = data_dir / "clips"
         self.clip_dir.mkdir(parents=True, exist_ok=True)
         self.actors = actors
+        self.authorization = authorization
         self.lease_ms = lease_ms
         self.active = {}
         self.recent = {actor: {} for actor in actors}
@@ -114,7 +117,8 @@ class Relay:
             raise RelayError(HTTPStatus.UNAUTHORIZED, "An actor token is required.")
         supplied = value.encode("ascii")
         expected = self.actors.values() if actor is None else (self.actors.get(actor, b""),)
-        if not any(compare_digest(supplied, token) for token in expected):
+        if (not any(compare_digest(supplied, token) for token in expected)
+                and not (self.authorization and self.authorization.allows(supplied, actor))):
             raise RelayError(HTTPStatus.UNAUTHORIZED, "Invalid actor token.")
 
     def clip_path(self, clip_id):
@@ -163,7 +167,7 @@ class Relay:
         return dance
 
     def repeat_start(self, actor, clip_id, event_id, now):
-        previous = self.recent[actor].get(event_id)
+        previous = self.recent.get(actor, {}).get(event_id)
         if previous is None:
             return None
         if previous.clip_id != clip_id or self.active_dance(actor, now) is not previous:
@@ -186,7 +190,7 @@ class Relay:
                 return repeated
             dance = Dance(actor, clip_id, event_id, duration_ms, now, now + self.lease_ms)
             self.active[actor] = dance
-            recent = self.recent[actor]
+            recent = self.recent.setdefault(actor, {})
             recent[event_id] = dance
             if len(recent) > RETAINED_EVENTS_PER_ACTOR:
                 del recent[next(iter(recent))]
@@ -249,6 +253,15 @@ class RelayHandler(BaseHTTPRequestHandler):
             actor = normalize_guid(route[1])
         except ValueError as error:
             raise RelayError(HTTPStatus.BAD_REQUEST, str(error)) from error
+        if route[2] in ("challenge", "authorize"):
+            if relay.authorization is None:
+                raise RelayError(HTTPStatus.NOT_FOUND, "Realm verification is not configured.")
+            body = load_object(self.read_body(MAX_CONTROL_BYTES))
+            if route[2] == "challenge":
+                relay.authorization.issue(actor, self.client_address[0])
+                return HTTPStatus.OK, {"sent": True}
+            code = read_id(body.get("proof"), PROOF, "realm proof")
+            return HTTPStatus.OK, relay.authorization.redeem(actor, self.client_address[0], code)
         relay.authorize(auth, actor)
         body = load_object(self.read_body(MAX_CONTROL_BYTES))
         event_id = read_id(body.get("event_id"), EVENT_ID, "event ID")
@@ -260,7 +273,7 @@ class RelayHandler(BaseHTTPRequestHandler):
     def dispatch(self, action):
         try:
             status, body = action()
-        except RelayError as error:
+        except (ProofError, RelayError) as error:
             status, body = error.status, {"error": str(error)}
         except TimeoutError:
             status, body = HTTPStatus.REQUEST_TIMEOUT, {"error": "Request timed out."}
@@ -299,12 +312,22 @@ def main():
     parser.add_argument("--data-dir", type=Path, required=True, help="Directory for persisted clip files")
     parser.add_argument("--actors", type=Path, required=True, help="JSON file mapping actor GUIDs to tokens")
     parser.add_argument("--lease-ms", type=int, default=DEFAULT_LEASE_MS)
+    parser.add_argument("--realm-proof", action="store_true", help="Verify publishers through the lab realm")
     args = parser.parse_args()
     if not 1_000 <= args.lease_ms <= 300_000:
         parser.error("Use a lease between 1,000 and 300,000 milliseconds.")
     logging.basicConfig(level=logging.INFO)
     try:
-        relay = Relay(args.data_dir, load_actor_tokens(args.actors), args.lease_ms)
+        authorization = None
+        if args.realm_proof:
+            if __package__:
+                from .spotlight_realm_proof import configured, deliver
+            else:
+                from spotlight_realm_proof import configured, deliver
+            if not configured():
+                raise ValueError("Set SPOTLIGHT_REALM_SOAP_CONTAINER to enable realm verification.")
+            authorization = RealmAuthorization(deliver)
+        relay = Relay(args.data_dir, load_actor_tokens(args.actors), args.lease_ms, authorization)
         with RelayServer((args.bind, args.port), relay) as server:
             LOG.info("Spotlight relay listening on %s:%s", *server.server_address)
             server.serve_forever()

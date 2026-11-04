@@ -28,7 +28,9 @@ def main():
     if settings.get("gallery_url"):
         bridge_args.extend(("--gallery-url", settings["gallery_url"]))
     token = app.parent / "relay.token"
-    if token.is_file():
+    if settings.get("relay_realm_auth"):
+        bridge_args.extend(("--relay-url", relay.base_url, "--realm-auth"))
+    elif token.is_file():
         bridge_args.extend(("--relay-url", relay.base_url, "--relay-token-file", str(token)))
     spotlight_bridge.main(bridge_args, game_pid=args.client_pid,
                           session_factory=lambda path, stormlib: SpotlightSession(path, stormlib, relay))

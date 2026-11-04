@@ -22,6 +22,7 @@ from tools.dance_capture.spotlight_library import LibraryError, dance_name, insp
 PAGE_SIZE = 6
 TOKEN = re.compile(r"[A-Za-z0-9_-]{16,128}")
 NAME_HEADER = "X-Spotlight-Dance-Name"
+GENERATED_HEADER = "X-Spotlight-Generated-At-Ms"
 WEB = Path(__file__).resolve().parent / "web"
 STATIC = {
     "/": ("index.html", "text/html; charset=utf-8"),
@@ -48,9 +49,13 @@ class Gallery:
             db.execute("PRAGMA journal_mode = WAL")
             db.execute("""CREATE TABLE IF NOT EXISTS dances (
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, created_at_ms INTEGER NOT NULL,
-                duration_ms INTEGER NOT NULL, motion BLOB NOT NULL
+                duration_ms INTEGER NOT NULL, motion BLOB NOT NULL, generated_at_ms INTEGER
             )""")
-            db.execute("CREATE INDEX IF NOT EXISTS dances_created ON dances (created_at_ms DESC, id DESC)")
+            if "generated_at_ms" not in {row["name"] for row in db.execute("PRAGMA table_info(dances)")}:
+                db.execute("ALTER TABLE dances ADD COLUMN generated_at_ms INTEGER")
+            db.execute("""CREATE INDEX IF NOT EXISTS dances_latest
+                ON dances (coalesce(generated_at_ms, created_at_ms) DESC, id DESC)""")
+            db.execute("DROP INDEX IF EXISTS dances_created")
 
     def connect(self):
         db = sqlite3.connect(self.database)
@@ -63,18 +68,24 @@ class Gallery:
                 or not compare_digest(value.encode("ascii"), self.token)):
             raise RequestError(HTTPStatus.UNAUTHORIZED, "A valid gallery publishing token is required.")
 
-    def publish(self, raw, name):
+    def publish(self, raw, name, generated_at_ms=None):
         try:
             clip_id, duration, _ = inspect_motion(raw)
         except LibraryError as error:
             raise RequestError(HTTPStatus.BAD_REQUEST, "Invalid Spotlight HumanMale dance.") from error
         created = time_ns() // 1_000_000
         with closing(self.connect()) as db, db:
-            cursor = db.execute("""INSERT INTO dances (id, name, created_at_ms, duration_ms, motion)
-                VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING""", (clip_id, name, created, duration, raw))
+            cursor = db.execute("""INSERT INTO dances (id, name, created_at_ms, duration_ms, motion, generated_at_ms)
+                VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING""",
+                                (clip_id, name, created, duration, raw, generated_at_ms))
             inserted = cursor.rowcount == 1
-            row = db.execute("SELECT id, name, created_at_ms, duration_ms FROM dances WHERE id = ?",
-                             (clip_id,)).fetchone()
+            if not inserted and generated_at_ms is not None:
+                # Re-scanning files uses the original generation time and only newer outputs advance the card.
+                db.execute("""UPDATE dances SET name = ?, generated_at_ms = ? WHERE id = ?
+                    AND (generated_at_ms IS NULL OR generated_at_ms < ?)""",
+                           (name, generated_at_ms, clip_id, generated_at_ms))
+            row = db.execute("""SELECT id, name, created_at_ms, duration_ms, generated_at_ms
+                FROM dances WHERE id = ?""", (clip_id,)).fetchone()
         return dict(row), inserted
 
     def page(self, page):
@@ -83,8 +94,9 @@ class Gallery:
             count = db.execute("SELECT count(*) FROM dances").fetchone()[0]
             pages = max(1, (count + PAGE_SIZE - 1) // PAGE_SIZE)
             page = min(page, pages)
-            rows = db.execute("""SELECT id, name, created_at_ms, duration_ms FROM dances
-                ORDER BY created_at_ms DESC, id DESC LIMIT ? OFFSET ?""", (PAGE_SIZE, (page - 1) * PAGE_SIZE))
+            rows = db.execute("""SELECT id, name, created_at_ms, duration_ms, generated_at_ms FROM dances
+                ORDER BY coalesce(generated_at_ms, created_at_ms) DESC, id DESC LIMIT ? OFFSET ?""",
+                              (PAGE_SIZE, (page - 1) * PAGE_SIZE))
             return {"items": [dict(row) for row in rows], "page": page, "pages": pages}
 
     def download(self, clip_id):
@@ -151,7 +163,7 @@ class GalleryHandler(BaseHTTPRequestHandler):
         elif path.startswith("/api/dances/"):
             clip_id = path.removeprefix("/api/dances/")
             raw, name = self.server.gallery.download(clip_id)
-            self.reply(HTTPStatus.OK, raw, "application/json; charset=utf-8", cache="public, max-age=31536000, immutable",
+            self.reply(HTTPStatus.OK, raw, "application/json; charset=utf-8", cache="no-cache",
                        headers=((NAME_HEADER, quote(name, safe="")),
                                 ("Content-Disposition", f'attachment; filename="{clip_id}.motion.json"')))
         else:
@@ -187,10 +199,17 @@ class GalleryHandler(BaseHTTPRequestHandler):
             name = dance_name(unquote(encoded_name, errors="strict"))
         except ValueError as error:
             raise RequestError(HTTPStatus.BAD_REQUEST, "Provide a UTF-8 dance name of 1 to 80 characters.") from error
+        generated_header = self.headers.get(GENERATED_HEADER)
+        generated_at_ms = None
+        if generated_header is not None:
+            if (not re.fullmatch(r"[1-9][0-9]{0,14}", generated_header)
+                    or int(generated_header) > time_ns() // 1_000_000 + 60_000):
+                raise RequestError(HTTPStatus.BAD_REQUEST, "Provide a valid generation timestamp in milliseconds.")
+            generated_at_ms = int(generated_header)
         raw = self.rfile.read(length)
         if len(raw) != length:
             raise RequestError(HTTPStatus.BAD_REQUEST, "Incomplete dance file.")
-        item, inserted = self.server.gallery.publish(raw, name)
+        item, inserted = self.server.gallery.publish(raw, name, generated_at_ms)
         self.json_reply(HTTPStatus.CREATED if inserted else HTTPStatus.OK, item)
 
     def log_message(self, pattern, *args):

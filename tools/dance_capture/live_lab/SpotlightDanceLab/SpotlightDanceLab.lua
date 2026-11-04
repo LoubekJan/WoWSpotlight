@@ -26,7 +26,7 @@ local signalCodes = {
     upload = {0, 1, 2, 3}, play = {3, 2, 1, 0}, list = {0, 2, 3, 1},
     load = {1, 0, 3, 2}, rename = {2, 3, 0, 1}, retry = {3, 0, 1, 2},
     receiving = {1, 3, 0, 2},
-    gallery = {0, 3, 1, 2}, download = {3, 1, 2, 0},
+    gallery = {0, 3, 1, 2}, download = {3, 1, 2, 0}, proof = {1, 2, 0, 3},
 }
 local markerSquares = {}
 local stockSquares = {}
@@ -39,7 +39,9 @@ local playDeadline
 local stockDeadline
 local spotlightEmote, spotlightPlayed = false, false
 local receiveDeadline
+local interruptedRequest
 local libraryRefreshUntil
+local activeProof, queuedProof, proofSignalUntil
 local bridgeBound = false
 local playable = false
 local retryable = false
@@ -191,6 +193,7 @@ local function paintSquare(square, colorIndex, width, height, x, y, cellWidth, c
 end
 
 local function showSignal(action, payload)
+    proofSignalUntil = action == "proof" and GetTime() + 1.5 or nil
     local width, height = UIParent:GetWidth(), UIParent:GetHeight()
     for index, square in ipairs(markerSquares) do
         paintSquare(square, signalCodes[action][index], width, height, index * 0.01, 0.02, 0.008, 0.014)
@@ -304,7 +307,7 @@ end
 
 local function beginRequest(action, payload, nextState, id)
     if pending or receiveDeadline then return end
-    pending = {action = action, id = id, previousState = state}
+    pending = {action = action, payload = payload, id = id, previousState = state}
     playDeadline = nil
     requestDeadline = GetTime() + 15
     if action == "load" or action == "upload" or action == "retry" then
@@ -366,10 +369,23 @@ local function validId(value, length)
     return #value == length and not value:find("[^0-9a-f]")
 end
 
+local function finishProof()
+    activeProof, queuedProof = queuedProof, nil
+    if proofSignalUntil then
+        proofSignalUntil = nil
+        signalMarker:Hide()
+    end
+end
+
 local function acceptPacket(packet)
     if #packet > 2048 then return end
     packet = packet:gsub("~", "\n")
     local header, body = packet:match("^([^\n]*)\n?(.*)$")
+    if (header == "proof|1" or header == "proof|0") and body == "" then
+        if activeProof and activeProof.sent then finishProof() end
+        if pending and interruptedRequest == pending then showSignal(pending.action, pending.payload) end
+        return true
+    end
     local incomingPage, incomingCount, activeId, eligible = header:match("^library|(%d+)|(%d+)|([0-9a-f]*)|([01])$")
     if not incomingPage then
         incomingPage, incomingCount, activeId = header:match("^library|(%d+)|(%d+)|([0-9a-f]*)$")
@@ -471,6 +487,7 @@ inbox:SetScript("OnEnterPressed", function(self)
         endRequest()
         showState("error", "Spotlight received an incomplete reply. Try again.")
     end
+    interruptedRequest = nil
 end)
 inbox:SetScript("OnEscapePressed", closeInbox)
 inbox:SetScript("OnEditFocusLost", function()
@@ -478,10 +495,9 @@ inbox:SetScript("OnEditFocusLost", function()
 end)
 
 local function openInbox()
-    if receiveDeadline then return end
+    if receiveDeadline or playDeadline then return end
     local chat = ChatEdit_GetActiveWindow and ChatEdit_GetActiveWindow() or _G.ChatFrameEditBox
     if chat and chat.HasFocus and chat:HasFocus() then return end
-    playDeadline = nil
     inbox:SetText("")
     inbox:Show()
     inbox:SetFocus()
@@ -490,6 +506,7 @@ local function openInbox()
         return
     end
     receiveDeadline = GetTime() + 3
+    interruptedRequest = signalMarker:IsShown() and pending or nil
     showSignal("receiving")
     refreshControls()
 end
@@ -595,13 +612,23 @@ showState("idle")
 
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("PLAYER_LOGOUT")
-loader:SetScript("OnEvent", function(self, event)
+if unifiedClient then loader:RegisterEvent("UI_INFO_MESSAGE") end
+loader:SetScript("OnEvent", function(self, event, message)
     if event == "PLAYER_LOGOUT" then
         endRequest()
         closeInbox()
         stockMarker:Hide()
         stockDeadline = nil
         spotlightPlayed = false
+        activeProof, queuedProof, proofSignalUntil = nil, nil, nil
+        return
+    elseif event == "UI_INFO_MESSAGE" then
+        local nonce = type(message) == "string" and message:match("^WSAUTH1([0-9a-f]+)$")
+        if nonce and validId(nonce, 48) and (not activeProof or activeProof.nonce ~= nonce) then
+            local now = GetTime()
+            local proof = {nonce = nonce, retryAt = now, expiresAt = now + 65}
+            if activeProof and activeProof.sent then queuedProof = proof else activeProof = proof end
+        end
         return
     elseif event == "PLAYER_REGEN_ENABLED" then
         self:UnregisterEvent(event)
@@ -627,6 +654,11 @@ end)
 
 loader:SetScript("OnUpdate", function()
     local now = GetTime()
+    if proofSignalUntil and now >= proofSignalUntil then
+        signalMarker:Hide()
+        proofSignalUntil = nil
+    end
+    if activeProof and now >= activeProof.expiresAt then finishProof() end
     if stockDeadline and now >= stockDeadline then
         stockMarker:Hide()
         stockDeadline = nil
@@ -647,6 +679,11 @@ loader:SetScript("OnUpdate", function()
     if queuedPage and not pending and not receiveDeadline then
         queuedPage = nil
         requestPage(0)
+    end
+    if activeProof and not pending and not receiveDeadline and not playDeadline and now >= activeProof.retryAt then
+        showSignal("proof", activeProof.nonce)
+        activeProof.sent = true
+        activeProof.retryAt = now + 2
     end
 end)
 

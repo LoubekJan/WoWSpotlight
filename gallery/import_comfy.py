@@ -56,11 +56,12 @@ class Importer:
         self.opener = build_opener(NoRedirect())
         self.processed = {}
 
-    def upload(self, name, data):
+    def upload(self, name, data, generated_at_ms):
         request = Request(self.url, data=data, headers={
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
             "X-Spotlight-Dance-Name": quote(name, safe=""),
+            "X-Spotlight-Generated-At-Ms": str(generated_at_ms),
         })
         try:
             with self.opener.open(request, timeout=10) as response:
@@ -103,7 +104,8 @@ class Importer:
                 LOG.warning("Skipped %s: %s", path.name, error)
             else:
                 try:
-                    digest = self.upload(clip_name(prefix, observed.st_mtime), data)
+                    digest = self.upload(clip_name(prefix, observed.st_mtime), data,
+                                         observed.st_mtime_ns // 1_000_000)
                 except InvalidOutput as error:
                     LOG.warning("Skipped %s: %s", path.name, error)
                 else:

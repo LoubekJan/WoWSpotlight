@@ -22,6 +22,7 @@ else:
 DANCE_EMOTE = 10
 POLL_SECONDS = 0.2
 REFRESH_SECONDS = 5
+CHALLENGE_RETRY_SECONDS = 75
 READ_ERRORS = (OSError, ValueError)
 NETWORK_ERRORS = (OSError, RelayError, URLError)
 
@@ -53,15 +54,20 @@ def read_token(path):
 
 
 class Publisher:
-    def __init__(self, relay, *, follow_emote=False, animation=None):
+    def __init__(self, relay, *, follow_emote=False, animation=None, realm_auth=False):
         self.relay = relay
         self.follow_emote = follow_emote
         self.animation = animation
+        self.realm_auth = realm_auth
         self.requests = SimpleQueue()
         self.closed = Event()
+        self.credentials = {}
 
-    def prepare(self, guid, clip_id):
-        self.requests.put(("prepare", (guid, clip_id)))
+    def prepare(self, guid, clip_id, motion=None):
+        self.requests.put(("prepare", (guid, clip_id, motion)))
+
+    def prove(self, guid, proof):
+        self.requests.put(("authorize", (guid, *self.relay.prove(guid, proof))))
 
     def play(self):
         self.requests.put(("play", None))
@@ -72,9 +78,20 @@ class Publisher:
     def close(self):
         self.closed.set()
 
+    def relay_for(self, guid):
+        if not self.realm_auth:
+            return self.relay
+        credential = self.credentials.get(guid)
+        if credential and credential[1] > monotonic():
+            return credential[0]
+        return None
+
     def stop(self, publication):
+        relay = self.relay_for(publication.guid)
+        if not relay:
+            return
         try:
-            self.relay.stop(publication.guid, publication.event_id)
+            relay.stop(publication.guid, publication.event_id)
         except NETWORK_ERRORS as error:
             logging.warning("Could not end shared dance immediately: %s", error)
         else:
@@ -82,6 +99,9 @@ class Publisher:
 
     def watch(self, pid, executable):
         prepared = current = pending = None
+        motion = uploaded = None
+        challenge_guid = 0
+        challenge_after = 0.0
         publish_after = pending_until = 0.0
         was_dancing = False
         try:
@@ -103,7 +123,12 @@ class Publisher:
                         except Empty:
                             break
                         if command == "prepare":
-                            prepared = value
+                            prepared = value[:2]
+                            motion = value[2]
+                        elif command == "authorize":
+                            actor, relay, expires = value
+                            self.credentials[actor] = (relay, expires)
+                            logging.info("Realm verified Spotlight character 0x%016X.", actor)
                         elif command == "play":
                             follow = False
                             requested = prepared
@@ -128,16 +153,36 @@ class Publisher:
                             current = None
                     if play:
                         pending = Publication(guid, prepared[1], uuid4().hex)
-                        pending_until = now + 5
+                        pending_until = now + (90 if self.realm_auth else 5)
                         publish_after = now
-                    publication = pending or current
-                    if publication and dancing and now >= publish_after:
+                    if guid != challenge_guid:
+                        challenge_guid, challenge_after = guid, now
+                    relay = self.relay_for(guid)
+                    if self.realm_auth and guid and not relay and now >= challenge_after:
+                        challenge_after = now + CHALLENGE_RETRY_SECONDS
                         try:
-                            reply = self.relay.start(publication.guid, publication.clip_id, publication.event_id)
+                            self.relay.challenge(guid)
+                        except NETWORK_ERRORS as error:
+                            challenge_after = now + 25
+                            if not isinstance(error, RelayError) or error.code != 429:
+                                logging.warning("Could not request Spotlight realm verification: %s", error)
+                    publication = pending or current
+                    if publication and dancing and relay and now >= publish_after:
+                        try:
+                            if self.realm_auth and uploaded != publication.clip_id:
+                                relay.upload(motion, expected_id=publication.clip_id)
+                                uploaded = publication.clip_id
+                            reply = relay.start(publication.guid, publication.clip_id, publication.event_id)
                             if reply.get("event_id") != publication.event_id:
                                 raise RelayError("The relay did not confirm the dance.")
                         except NETWORK_ERRORS as error:
-                            if isinstance(error, RelayError) and error.code in (401, 403, 409):
+                            if self.realm_auth and isinstance(error, RelayError) and error.code in (401, 403):
+                                self.credentials.pop(guid, None)
+                                challenge_after = now
+                            elif self.realm_auth and isinstance(error, RelayError) and error.code == 404 and uploaded:
+                                uploaded = None
+                                publish_after = now + 1
+                            elif isinstance(error, RelayError) and error.code in (401, 403, 409):
                                 logging.error("Shared dance rejected: %s", error)
                                 if current and current != publication:
                                     self.stop(current)

@@ -6,7 +6,7 @@ Po kliknutí na **Play dance** klient přehraje vlastní klip a oznámí jeho za
 - **ID přehrání** vznikne při každém spuštění, i když hráč znovu použije stejný klip. Služba k němu přiřadí GUID tanečníka a čas začátku. Podle něj naváže divák, který dorazí později, na aktuální část smyčky.
 - **Sloty animací** jsou 69 pro běžný `/dance`, 211 pro vlastní tanec a 154 a 155 pro dva současně sledované tanečníky. Načtení klipu pouze připraví slot 211. Pohybem hráč ukončí vlastní tanec a sdílení. Příkaz `/dance` přepne na běžný tanec a ukončí sdílení.
 
-V jednom klientu WoWSpotlight probíhá tvorba i sledování tanců automaticky po startu hry. Pro publikování ulož token postavy do `Spotlight\relay.token`. Následující kroky pro tanečníka a diváka patří k dřívější zkoušce s oddělenými klienty. [Společný klient](player-files.md)
+V jednom klientu WoWSpotlight probíhá tvorba i sledování tanců automaticky po startu hry. Na AI World Labu klient získá oprávnění ke sdílení pro právě přihlášenou postavu. Realm doručí jednorázový ověřovací kód jen této postavě a doplněk jej předá pomocné aplikaci. Následující kroky patří k dřívější zkoušce s oddělenými klienty a ručními tokeny. [Společný klient](player-files.md)
 
 ## Tanečník
 
@@ -48,6 +48,8 @@ Použij izolovaný klient WoW 3.3.5a enUS build 12340. Vytvoř soubor `Spotlight
 ## Nastavení služby Spotlight
 
 Na AI World Lab běží `wowspotlight-relay.service` na adrese `http://192.168.0.248:8765`. Nastavení tanečníků je na serveru v `~/.local/share/wowspotlight/config/actors.json` pod účtem služby. Správce přidá GUID ve tvaru `0x` a 16 hexadecimálních číslic a náhodný token pro tuto postavu. Po úpravě restartuje službu. GUID přihlášené postavy lze přečíst přes `duet_select.py status <PID> --client-dir <cesta>` v poli `local_player_guid`.
+
+Pro automatické ověření zapni službu s volbou `--realm-proof`. Proměnná `SPOTLIGHT_REALM_SOAP_CONTAINER` ukazuje na kontejner účtového webu labu s existujícím přístupem k privátní konzoli TrinityCore. Kód platí 75 sekund a vydané oprávnění má rozsah jedné postavy. V klientském `Spotlight/settings.json` se tento režim zapíná pomocí `relay_realm_auth`. Služba je určená pro síť AI World Labu.
 
 Pro jiný lab spusť `tools/dance_capture/spotlight_relay.py --actors <actors.json> --data-dir <uložiště> --bind <adresa> --port 8765`. Soubor `actors.json` je JSON objekt mapující GUID na jedinečný token o délce 16 až 128 znaků z množiny `A–Z a–z 0–9 _ -`. Služba používá Python 3.12 a ukládá ověřené soubory JSON podle SHA-256. Aktivní tance jsou dočasné a klient tanečníka je pravidelně obnovuje. Diváci čtou stav a klipy bez tokenu. Nasazení na labu je určené pro jeho interní síť.
 

@@ -75,6 +75,7 @@ def main():
     parser.add_argument("--comfy-url", default="http://192.168.0.248:8188")
     parser.add_argument("--gallery-url", default="http://192.168.0.248:9093")
     parser.add_argument("--relay-url", default="http://192.168.0.248:8765")
+    parser.add_argument("--relay-realm-auth", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--realmlist", default="192.168.0.248")
     args = parser.parse_args()
     if sys.platform != "win32" or sys.version_info[:2] != (3, 12) or struct.calcsize("P") != 8:
@@ -86,7 +87,8 @@ def main():
     if not args.realmlist or not all(char.isascii() and (char.isalnum() or char in ".-:[]") for char in args.realmlist):
         parser.error("Supply a realm address without spaces.")
     try:
-        settings = {"comfy_url": args.comfy_url, "gallery_url": args.gallery_url, "relay_url": args.relay_url}
+        settings = {"comfy_url": args.comfy_url, "gallery_url": args.gallery_url, "relay_url": args.relay_url,
+                    "relay_realm_auth": args.relay_realm_auth}
         build_files(data, args.bootstrap, output, settings, args.realmlist)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Could not build Spotlight client files: {error}\n")

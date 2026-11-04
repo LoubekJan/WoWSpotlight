@@ -22,7 +22,7 @@ import duet_select
 import runtime_poc
 from spotlight_comfy import DEFAULT_COMFY_URL, run_comfy_video
 from spotlight_gallery import Gallery
-from spotlight_http import Relay
+from spotlight_http import Relay, read_clip, verify_clip
 from spotlight_ipc import (
     MAX_REPLY_BYTES, PAYLOAD_HEIGHT, PAYLOAD_SIGNALS, PAYLOAD_WIDTH, SIGNALS,
     STOCK_DANCE_SIGNAL, color_index, error_reply, gallery_reply, hex_field, library_reply, read_payload,
@@ -257,6 +257,7 @@ class SpotlightBridge:
         self.stormlib_module = stormlib_module
         self.events = SimpleQueue()
         self.busy = False
+        self.proof_busy = False
         self.status = None
         self.last_window = None
         self.signal_visible = None
@@ -289,10 +290,16 @@ class SpotlightBridge:
         if dancing and self.publisher and not self.session:
             raise ValueError("Move to stop the current dance before loading another one.")
         active = self.client_dir / "Spotlight" / "active.pose.json"
+        source = library.path_for(clip_id)
         with TemporaryDirectory(dir=active.parent) as work:
             motion = Path(work) / "active.pose.json"
-            copyfile(library.path_for(clip_id), motion)
-            shared_clip = self.publisher.relay.upload(motion) if self.publisher else None
+            copyfile(source, motion)
+            shared_clip = None
+            if self.publisher:
+                if self.publisher.realm_auth:
+                    shared_clip = verify_clip(read_clip(motion))
+                else:
+                    shared_clip = self.publisher.relay.upload(motion)
             if self.player(pid) != guid:
                 raise ValueError("The active character changed before the dance could be loaded.")
             if self.session:
@@ -301,7 +308,7 @@ class SpotlightBridge:
                 applied = runtime_poc.apply(pid, self.client_dir, motion, self.stormlib_module)
             motion.replace(active)
         if self.publisher:
-            self.publisher.prepare(guid, shared_clip)
+            self.publisher.prepare(guid, shared_clip, source if self.publisher.realm_auth else None)
         self.loaded_clip = (guid, clip_id)
         logging.info("Library dance %s ready: %s; shared=%s", clip_id, applied, shared_clip)
 
@@ -309,6 +316,17 @@ class SpotlightBridge:
         loaded = self.loaded_clip[1] if self.loaded_clip and self.loaded_clip[0] == guid else None
         retryable = bool(self.retry_video and self.retry_video[0] == guid)
         self.events.put(("reply", guid, library_reply(library.entries(), self.page, loaded, retryable)))
+
+    def verify_player(self, guid, proof):
+        verified = False
+        try:
+            if self.publisher and self.publisher.realm_auth:
+                self.publisher.prove(guid, proof)
+                verified = True
+        except (OSError, ValueError, RuntimeError) as error:
+            logging.warning("Could not verify the Spotlight player: %s", error)
+        finally:
+            self.events.put(("proof", guid, f"proof|{int(verified)}"))
 
     def work(self, action, payload, pid, guid):
         try:
@@ -474,6 +492,10 @@ class SpotlightBridge:
                     break
                 if kind == "done":
                     self.busy = False
+                elif kind == "proof":
+                    self.proof_busy = False
+                    if owner == guid:
+                        self.replies.append(value)
                 elif owner == guid:
                     if kind == "status":
                         self.status = value
@@ -493,6 +515,10 @@ class SpotlightBridge:
                     self.session.request_playback(guid, True, self.publisher.play if self.publisher else None)
                 elif self.publisher:
                     self.publisher.play()
+            elif signal == "proof":
+                if new_signal and not self.proof_busy:
+                    self.proof_busy = True
+                    Thread(target=self.verify_player, args=(guid, payload), daemon=True).start()
             elif signal in PAYLOAD_SIGNALS and new_signal and not self.busy:
                 self.busy = True
                 Thread(target=self.work, args=(signal, payload, pid, guid), daemon=True).start()
@@ -512,12 +538,13 @@ def main(argv=None, *, session_factory=None, game_pid=None):
     parser.add_argument("--stormlib-module", type=Path, default=client_poc.DEFAULT_STORMLIB)
     parser.add_argument("--relay-url", help="Optional Spotlight relay for sharing dances")
     parser.add_argument("--relay-token-file", type=Path, help="Private token for this test character")
+    parser.add_argument("--realm-auth", action="store_true", help="Verify the logged-in character through the relay")
     parser.add_argument("--launch", action="store_true", help="Start the test client if its window is closed")
     args = parser.parse_args(argv)
     if os.name != "nt":
         parser.error("The Spotlight game companion requires Windows.")
-    if bool(args.relay_url) != bool(args.relay_token_file):
-        parser.error("Pass --relay-url and --relay-token-file together to share dances.")
+    if (args.realm_auth and args.relay_token_file) or bool(args.relay_url) != bool(args.realm_auth or args.relay_token_file):
+        parser.error("Use --relay-url with either --realm-auth or --relay-token-file to share dances.")
 
     ctypes.WinDLL("user32").SetProcessDPIAware()
     root = tk.Tk()
@@ -537,7 +564,8 @@ def main(argv=None, *, session_factory=None, game_pid=None):
         if not runtime_poc.is_verified_executable(executable):
             raise ValueError("Spotlight potřebuje původní WoW 3.3.5a enUS (build 12340) nebo ověřenou variantu klienta.")
         if args.relay_url:
-            publisher = Publisher(Relay(args.relay_url, read_token(args.relay_token_file)),
+            token = read_token(args.relay_token_file) if args.relay_token_file else None
+            publisher = Publisher(Relay(args.relay_url, token), realm_auth=args.realm_auth,
                                   animation=client_poc.ANIMATION_ID if session_factory else None)
         logs = client_dir / "Logs"
         logs.mkdir(exist_ok=True)

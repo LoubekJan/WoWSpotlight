@@ -84,17 +84,19 @@ class Relay:
         self.token = token
         self.opener = build_opener(NoRedirect())
 
-    def request(self, path, data=None, *, raw=False, limit=MAX_STATE_BYTES):
+    def request(self, path, data=None, *, raw=False, limit=MAX_STATE_BYTES, authenticate=True, timeout=3):
         headers = {}
         if data is not None:
-            if not self.token:
+            if authenticate and not self.token:
                 raise RelayError("An actor token is required to publish a dance.")
-            headers = {"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"}
+            headers = {"Content-Type": "application/json"}
+            if authenticate:
+                headers["Authorization"] = f"Bearer {self.token}"
             if not isinstance(data, bytes):
                 data = json.dumps(data, separators=(",", ":")).encode("ascii")
         request = Request(self.base_url + path, data=data, headers=headers)
         try:
-            with self.opener.open(request, timeout=3) as response:
+            with self.opener.open(request, timeout=timeout) as response:
                 body = response.read(limit + 1)
         except HTTPError as error:
             with error:
@@ -112,12 +114,25 @@ class Relay:
             raise RelayError("Spotlight relay returned an unexpected response.")
         return value
 
-    def upload(self, path):
+    def upload(self, path, *, expected_id=None):
         data = read_clip(path)
         clip_id = verify_clip(data)
+        if expected_id is not None and clip_id != expected_id:
+            raise RelayError("The prepared dance changed before it could be shared.")
         if self.request("/clips", data).get("clip_id") != clip_id:
             raise RelayError("Spotlight relay did not confirm this clip.")
         return clip_id
+
+    def challenge(self, guid):
+        return self.request(f"/actors/0x{guid:016x}/challenge", {}, authenticate=False, timeout=10)
+
+    def prove(self, guid, proof):
+        reply = self.request(f"/actors/0x{guid:016x}/authorize", {"proof": proof}, authenticate=False)
+        token, expires = reply.get("token"), reply.get("expires_in")
+        if (not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", token)
+                or type(expires) is not int or not 0 < expires <= 86_400):
+            raise RelayError("Invalid Spotlight realm credentials.")
+        return Relay(self.base_url, token), monotonic() + expires
 
     def start(self, guid, clip_id, event_id):
         return self.request(f"/actors/0x{guid:016x}/start", {"clip_id": clip_id, "event_id": event_id})

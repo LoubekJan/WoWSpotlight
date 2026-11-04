@@ -2,7 +2,7 @@
 
 Na AI World Labu otevři [webovou galerii](http://192.168.0.248:9093/). Můžeš procházet klipy a stáhnout si výsledný soubor animace. Ve WoW otevři `/spotlight` → **Gallery**, klikni na **Download** u vybraného tance a pak ho vyber v **My dances**. Po načtení klikni na **Play dance**. Prohlížení a stahování používá stejnou galerii na webu i ve hře.
 
-Importér každých pět sekund prochází výstupy Spotlightu v ComfyUI. Zpracuje i existující výstupy. Do galerie publikuje pouze hotové animace `*.motion.json`. Klip má ID podle SHA-256 výsledných dat. Stejný obsah má v galerii jeden záznam a klient při stažení kontroluje shodu s ID.
+Importér každých pět sekund prochází výstupy Spotlightu v ComfyUI. Zpracuje i existující výstupy. Do galerie publikuje pouze hotové animace `*.motion.json`. Klip má ID podle SHA-256 výsledných dat a klient při stažení kontroluje shodu s ID. Když nový převod vytvoří shodný klip, galerie posune jeho stávající kartu mezi nejnovější a zobrazí čas posledního převodu.
 
 ## Nasazení s ComfyUI
 

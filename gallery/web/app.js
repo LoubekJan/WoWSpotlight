@@ -6,7 +6,7 @@ const previous = document.querySelector("#previous");
 const next = document.querySelector("#next");
 const pageLabel = document.querySelector("#page");
 const idPattern = /^[a-f0-9]{64}$/;
-const dateFormat = new Intl.DateTimeFormat("cs", { dateStyle: "medium" });
+const dateFormat = new Intl.DateTimeFormat("cs", { dateStyle: "medium", timeStyle: "short" });
 const durationFormat = new Intl.NumberFormat("cs", { maximumFractionDigits: 1 });
 const svgNamespace = "http://www.w3.org/2000/svg";
 const palettes = ["plum", "indigo", "olive", "rust"];
@@ -67,7 +67,7 @@ function decoration(id) {
 function danceCard(dance) {
   const card = element("li", "card");
   const body = element("div", "card-body");
-  const date = new Date(dance.created_at_ms);
+  const date = new Date(dance.generated_at_ms ?? dance.created_at_ms);
   const time = element("time", null, dateFormat.format(date));
   time.dateTime = date.toISOString();
   const metadata = element("p", "metadata");
@@ -85,10 +85,11 @@ function danceCard(dance) {
 }
 
 function isDance(dance) {
+  const timestamp = dance?.generated_at_ms ?? dance?.created_at_ms;
   return dance && typeof dance.id === "string" && idPattern.test(dance.id)
     && typeof dance.name === "string" && dance.name.trim().length > 0
-    && Number.isSafeInteger(dance.created_at_ms) && dance.created_at_ms > 0
-    && !Number.isNaN(new Date(dance.created_at_ms).getTime())
+    && Number.isSafeInteger(timestamp) && timestamp > 0
+    && !Number.isNaN(new Date(timestamp).getTime())
     && Number.isSafeInteger(dance.duration_ms) && dance.duration_ms > 0;
 }
 
@@ -131,4 +132,7 @@ async function showPage(target) {
 reload.addEventListener("click", () => showPage(requestedPage));
 previous.addEventListener("click", () => showPage(page - 1));
 next.addEventListener("click", () => showPage(page + 1));
+window.addEventListener("focus", () => {
+  if (page === 1 && !reload.disabled) showPage(1);
+});
 showPage(1);
