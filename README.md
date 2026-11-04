@@ -21,6 +21,10 @@ Knihovna je ve složce klienta pod `Spotlight\library` a ukládá se zvlášť p
 
 ## První instalace
 
+Pro dalšího hráče na AI World Lab použij `C:\WoWSpotlight\artifacts\release\WoWSpotlight-Player.zip`. Obsahuje spouštěč, klientské patche, doplňky, StormLib, offline instalátor Pythonu a návod. Hráč ho rozbalí a spustí `Spotlight.cmd`, který instaluje do jeho kopie WoW. [Návod z balíčku](tools/dance_capture/player_package/README.md)
+
+Balíček sestavíš z kořene projektu pomocí `& '.\tools\dance_capture\build_player_package.ps1' -ClientData '<cesta ke klientu>\Data'`. Sestavení používá StormLib v `tools\dance_capture\vendor` a oficiální offline instalátor `python-3.12.10-amd64.exe` ve složce `artifacts\install\dependencies`. [Python 3.12.10 pro Windows](https://www.python.org/downloads/release/python-31210/#files)
+
 Na AI World Lab jsou hotové instalační balíčky ve složce `C:\WoWSpotlight\artifacts\install`. Při vypnutém WoW zkopíruj zvolený soubor do nové kopie klienta.
 
 | Účel | Soubor ve složce `artifacts\install` | Kam v klientu |
