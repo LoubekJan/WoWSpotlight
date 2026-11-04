@@ -37,6 +37,8 @@ Pro technickou zkoušku s hotovým souborem lze místo panelu spustit `spotlight
 
 ### Příprava další kopie diváka
 
+Na AI World Lab můžeš zkopírovat hotové soubory ze složky projektu. [Ruční příprava diváka](player-files.md#sledování-sdílených-tanců)
+
 Použij izolovaný klient WoW 3.3.5a enUS build 12340. Vytvoř soubor `SpotlightDuet.lab` a znovu sestav `Data\patch-Z.MPQ` podle [návodu pro duet](duet.md#příprava-dalších-testovacích-kopií). Aktuální generátor označuje každý slot, aby jej šlo jednoznačně najít a vyměnit za běhu. Do `Interface\AddOns` diváka zkopíruj celou složku `tools\dance_capture\live_lab\SpotlightViewer`. Divák používá původní mapování `/dance` ze základní hry.
 
 ## Nastavení služby Spotlight
