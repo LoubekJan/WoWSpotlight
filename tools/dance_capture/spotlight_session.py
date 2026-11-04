@@ -66,13 +66,17 @@ class SpotlightSession:
         finally:
             self.ready.set()
 
-    def load(self, guid, motion):
-        if not self.ready.wait(5):
+    def require_ready(self):
+        if not self.ready.is_set():
             raise ValueError("Spotlight is still preparing the client. Try again in a moment.")
+        if self.viewer is None:
+            raise ValueError(str(self.error or "Spotlight could not attach to the client."))
+        return self.viewer
+
+    def load(self, guid, motion):
+        self.ready.wait(5)
         with self.lock:
-            viewer = self.viewer
-            if not viewer:
-                raise ValueError(str(self.error or "Spotlight could not attach to the client."))
+            viewer = self.require_ready()
             if duet_select.active_guid(viewer.process) != guid:
                 raise ValueError("The active character changed before the dance could be loaded.")
             report = viewer.runtime.apply(client_poc.ANIMATION_ID, motion)

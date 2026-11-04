@@ -308,6 +308,8 @@ class SpotlightBridge:
     def work(self, action, payload, pid, guid):
         try:
             logging.info("Spotlight %s request for 0x%016X.", action, guid)
+            if self.session and action in ("upload", "load", "retry"):
+                self.session.require_ready()
             library = DanceLibrary(self.client_dir, guid)
             if action == "list":
                 self.page = int(payload) if payload.isascii() and payload.isdecimal() else 1
@@ -354,6 +356,14 @@ class SpotlightBridge:
 
     def choose(self, hwnd, pid, guid):
         self.busy = True
+        if self.session:
+            try:
+                self.session.require_ready()
+            except ValueError as error:
+                self.events.put(("status", guid, "error"))
+                self.events.put(("reply", guid, error_reply(str(error), False)))
+                self.events.put(("done", guid, None))
+                return
         try:
             logging.info("Opening Spotlight video picker")
             self.root.deiconify()

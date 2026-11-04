@@ -26,20 +26,23 @@ class DuetRuntime:
         self.executable = self.client_dir / "WoW.exe"
         if not runtime_poc.is_verified_executable(self.executable):
             raise ValueError("The executable does not match a verified WoW 3.3.5a build 12340.")
+        data = self.client_dir / "Data"
+        patch = data / "patch-Z.MPQ"
+        if not patch.is_file():
+            raise FileNotFoundError("Chybí Data\\patch-Z.MPQ. Po doplnění restartuj WoW.")
 
         spec = spec_from_file_location("spotlight_duet_stormlib", stormlib_module)
         if spec is None or spec.loader is None:
             raise ImportError("Pass the path to the StormLib Python wrapper.")
         stormlib = module_from_spec(spec)
         spec.loader.exec_module(stormlib)
-        data = self.client_dir / "Data"
         self.model = client_poc.read_source(stormlib.Archive, data / "patch-3.MPQ",
                                             client_poc.MODEL_PATH, client_poc.MODEL_HASH)
         self.stock = client_poc.read_source(stormlib.Archive, data / "patch-2.MPQ",
                                             client_poc.ANIMATION_PATH, client_poc.ANIMATION_HASH)
         self.tracks = client_poc.full_body_tracks(self.model, self.stock)
         self.translations = client_poc.translation_ranges(self.model)
-        with stormlib.Archive(data / "patch-Z.MPQ") as archive:
+        with stormlib.Archive(patch) as archive:
             installed_model = archive.read(client_poc.MODEL_PATH)
             if installed_model == duet_assets.duplicate_slot(self.model):
                 slot_members = duet_assets.SLOT_MEMBERS
