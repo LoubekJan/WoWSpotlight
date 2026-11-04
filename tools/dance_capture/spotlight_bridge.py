@@ -15,13 +15,17 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 
 import client_poc
+import duet_select
 import runtime_poc
 from spotlight_comfy import DEFAULT_COMFY_URL, run_comfy_video
+from spotlight_http import Relay
+from spotlight_publish import Publisher, local_dance, read_token
 
 
 STATUS_KEYS = dict(selecting=0x74, uploading=0x75, processing=0x76, ready=0x77,
                    error=0x78, cancelled=0x79)
-SIGNAL_COLORS = ((255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255))
+UPLOAD_SIGNAL = ((255, 0, 0), (0, 255, 0), (0, 0, 255), (255, 0, 255))
+SIGNALS = {"upload": UPLOAD_SIGNAL, "play": UPLOAD_SIGNAL[::-1]}
 
 
 class GameWindow:
@@ -102,7 +106,7 @@ class GameWindow:
         self.user.GetWindowThreadProcessId(hwnd, ctypes.byref(current_pid))
         return current_pid.value == pid
 
-    def upload_requested(self, hwnd):
+    def request_signal(self, hwnd):
         if self.user.GetForegroundWindow() != hwnd:
             return False
         rect, origin = wintypes.RECT(), wintypes.POINT()
@@ -115,13 +119,15 @@ class GameWindow:
         try:
             # Read only the four marker pixels in the intended foreground client.
             y = origin.y + round(height * 0.02)
-            for index, expected in enumerate(SIGNAL_COLORS, 1):
+            colors = []
+            for index in range(1, 5):
                 x = origin.x + round(width * index / 100)
                 pixel = self.gdi.GetPixel(dc, x, y)
-                actual = tuple((pixel >> shift) & 255 for shift in (0, 8, 16))
-                if any(abs(a - e) > 45 for a, e in zip(actual, expected)):
-                    return False
-            return True
+                colors.append(tuple((pixel >> shift) & 255 for shift in (0, 8, 16)))
+            for signal, expected in SIGNALS.items():
+                if all(abs(a - e) <= 45 for color, marker in zip(colors, expected) for a, e in zip(color, marker)):
+                    return signal
+            return None
         finally:
             self.user.ReleaseDC(None, dc)
 
@@ -138,26 +144,42 @@ class GameWindow:
 
 
 class SpotlightBridge:
-    def __init__(self, root, game, client_dir, base_url, stormlib_module):
+    def __init__(self, root, game, client_dir, base_url, stormlib_module, publisher):
         self.root, self.game, self.client_dir, self.base_url = root, game, client_dir, base_url
         self.stormlib_module = stormlib_module
         self.events = SimpleQueue()
         self.busy = False
         self.status = None
         self.last_window = None
-        self.signal_visible = False
+        self.signal_visible = None
+        self.publisher = publisher
+        self.publisher_thread = None
         samples = client_dir.parent / "Clips"
         self.video_dir = samples if samples.is_dir() else Path.home()
 
     def run(self, video, pid):
         try:
+            if self.publisher:
+                with runtime_poc.ClientProcess(pid, self.game.executable, rights=duet_select.PROCESS_READ_RIGHTS) as process:
+                    guid, _ = local_dance(process)
+                if not guid:
+                    raise ValueError("Přihlas se za postavu před nahráním videa.")
             active = self.client_dir / "Spotlight" / "active.pose.json"
             active.parent.mkdir(parents=True, exist_ok=True)
             with TemporaryDirectory(dir=active.parent) as work:
                 motion = Path(work) / "active.pose.json"
                 result = run_comfy_video(video, motion, base_url=self.base_url, on_status=self.progress)
+                if self.publisher:
+                    with runtime_poc.ClientProcess(pid, self.game.executable, rights=duet_select.PROCESS_READ_RIGHTS) as process:
+                        current, dancing = local_dance(process)
+                    if current != guid or dancing:
+                        raise ValueError("Zůstaň za stejnou postavu a ukonči předchozí tanec před načtením dalšího.")
+                    clip_id = self.publisher.relay.upload(motion)
                 applied = runtime_poc.apply(pid, self.client_dir, motion, self.stormlib_module)
                 motion.replace(active)
+            if self.publisher:
+                self.publisher.prepare(guid, clip_id)
+                result["shared_clip_id"] = clip_id
             result["active_path"] = str(active)
             logging.info("Motion ready: %s; %s", result, applied)
         except Exception:
@@ -211,6 +233,9 @@ class SpotlightBridge:
         if window:
             self.last_window = window
             hwnd, pid = window
+            if self.publisher and self.publisher_thread is None:
+                self.publisher_thread = Thread(target=self.publisher.watch, args=(pid, self.game.executable), daemon=True)
+                self.publisher_thread.start()
             while True:
                 try:
                     status = self.events.get_nowait()
@@ -219,11 +244,13 @@ class SpotlightBridge:
                 self.status = status
                 if status in ("ready", "error", "cancelled"):
                     self.busy = False
-            signal = self.game.upload_requested(hwnd)
-            if signal and not self.signal_visible and not self.busy and self.status is None:
+            signal = self.game.request_signal(hwnd)
+            if signal == "upload" and self.signal_visible != signal and not self.busy and self.status is None:
                 self.busy = True
                 self.status = "selecting"
                 self.root.after(250, lambda: self.choose(hwnd, pid))
+            elif signal == "play" and self.signal_visible != signal and self.publisher:
+                self.publisher.play()
             self.signal_visible = signal
             if self.status and self.game.notify(hwnd, self.status):
                 self.status = None
@@ -235,10 +262,14 @@ def main():
     parser.add_argument("--client-dir", type=Path, default=runtime_poc.DEFAULT_CLIENT)
     parser.add_argument("--comfy-url", default=DEFAULT_COMFY_URL)
     parser.add_argument("--stormlib-module", type=Path, default=client_poc.DEFAULT_STORMLIB)
+    parser.add_argument("--relay-url", help="Optional Spotlight relay for sharing dances")
+    parser.add_argument("--relay-token-file", type=Path, help="Private token for this test character")
     parser.add_argument("--launch", action="store_true", help="Start the test client if its window is closed")
     args = parser.parse_args()
     if os.name != "nt":
         parser.error("The Spotlight game companion requires Windows.")
+    if bool(args.relay_url) != bool(args.relay_token_file):
+        parser.error("Pass --relay-url and --relay-token-file together to share dances.")
 
     ctypes.WinDLL("user32").SetProcessDPIAware()
     root = tk.Tk()
@@ -250,11 +281,14 @@ def main():
     client_dir = args.client_dir.resolve()
     executable = client_dir / "WoW.exe"
     mutex = None
+    publisher = None
     try:
         if client_dir == client_poc.DEFAULT_DATA.resolve().parent:
             raise ValueError("Použij oddělenou testovací kopii WoW.")
         if sha256(executable.read_bytes()).hexdigest() != runtime_poc.CLIENT_HASH:
             raise ValueError("Tato kopie WoW neodpovídá ověřenému buildu 12340.")
+        if args.relay_url:
+            publisher = Publisher(Relay(args.relay_url, read_token(args.relay_token_file)))
         logs = client_dir / "Logs"
         logs.mkdir(exist_ok=True)
         logging.basicConfig(filename=logs / "SpotlightBridge.log", encoding="utf-8", level=logging.INFO,
@@ -271,12 +305,16 @@ def main():
         messagebox.showerror("Spotlight", str(error), parent=root)
         root.destroy()
         return
-    bridge = SpotlightBridge(root, game, client_dir, args.comfy_url, args.stormlib_module.resolve())
+    bridge = SpotlightBridge(root, game, client_dir, args.comfy_url, args.stormlib_module.resolve(), publisher)
     logging.info("Spotlight is waiting for requests from %s", executable)
     root.after(250, bridge.poll)
     try:
         root.mainloop()
     finally:
+        if publisher:
+            publisher.close()
+            if bridge.publisher_thread:
+                bridge.publisher_thread.join(timeout=4)
         game.kernel.CloseHandle(mutex)
 
 

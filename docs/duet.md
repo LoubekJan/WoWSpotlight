@@ -68,4 +68,4 @@ py -3.12 -B .\tools\dance_capture\duet_preview.py `
     .\artifacts\duet\patch-enUS-Z.MPQ --client-data 'C:\WoWModding\Client-Lab\Data'
 ```
 
-Duet používá dva předem sestavené sloty a ruční přiřazení ke dvěma postavám. Vlastní přehrávání tanečníků dál řídí jejich klient. Automatické doručení klipů do klienta diváka je další milník.
+Tato zkouška používá dva předem sestavené sloty a ruční přiřazení ke dvěma postavám. Pro přenos nových klipů za běhu použij [automatické sdílení](sharing.md).

@@ -21,9 +21,10 @@ Klip najdeš ve složce klienta jako `Spotlight\active.pose.json`. Průběh a ch
 - [Instalace uzlů a workflow v ComfyUI](docs/comfyui.md)
 - [Původní extraktor a náhled animace bez realmu](tools/dance_capture/README.md)
 - [Duet na testovacím realmu a samostatný náhled](docs/duet.md)
+- [Automatické sdílení a přehrávání u diváka](docs/sharing.md)
 
 Klient WoW, knihovnu StormLib a model MediaPipe je potřeba dodat podle návodů. Zdrojové soubory zahrnují doplněk do WoW, pomocnou aplikaci pro Windows, nástroje pro sestavení klientského balíčku, uzly ComfyUI a workflow.
 
 ## Rozsah PoC
 
-Ověřeno na Windows s klientem WoW 3.3.5a enUS build 12340 a kostrou `HumanMale`. ComfyUI zpracuje nejvýše prvních 17,7 sekundy videa a vytvoří rotační stopy pro 20 kostí. Pohyb probíhá na místě. Herní panel používá jeden sdílený animační slot. Samostatná zkouška duetu přiřazuje dva klipy dvěma konkrétním postavám v klientu diváka.
+Ověřeno na Windows s klientem WoW 3.3.5a enUS build 12340 a kostrou `HumanMale`. ComfyUI zpracuje nejvýše prvních 17,7 sekundy videa a vytvoří rotační stopy pro 20 kostí. Pohyb probíhá na místě. Automatické sdílení podporuje dva tanečníky současně v připraveném klientu diváka.

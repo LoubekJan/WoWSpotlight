@@ -17,6 +17,7 @@ local markerColors = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {1, 0, 1}}
 local markerSquares = {}
 local state = "idle"
 local requestDeadline
+local playDeadline
 local bridgeBound = false
 
 uploadMarker:SetAllPoints(UIParent)
@@ -78,6 +79,7 @@ end
 local function finishRequest()
     uploadMarker:Hide()
     requestDeadline = nil
+    playDeadline = nil
 end
 
 local function onBridgeStatus(nextState)
@@ -85,16 +87,23 @@ local function onBridgeStatus(nextState)
     showState(nextState)
 end
 
-upload:SetScript("OnClick", function()
-    if requestDeadline then return end
+local function showSignal(playing)
     local width, height = UIParent:GetWidth(), UIParent:GetHeight()
     for index, square in ipairs(markerSquares) do
+        local color = markerColors[playing and #markerColors + 1 - index or index]
+        square:SetTexture(color[1], color[2], color[3], 1)
         square:ClearAllPoints()
         square:SetSize(width * 0.008, height * 0.014)
         square:SetPoint("CENTER", UIParent, "TOPLEFT", width * index * 0.01, -height * 0.02)
     end
-    requestDeadline = GetTime() + 15
     uploadMarker:Show()
+end
+
+upload:SetScript("OnClick", function()
+    if requestDeadline then return end
+    playDeadline = nil
+    requestDeadline = GetTime() + 15
+    showSignal(false)
     showState("waiting")
 end)
 
@@ -102,6 +111,8 @@ play:SetScript("OnClick", function()
     if state == "ready" then
         panel:Hide()
         DoEmote("DANCE")
+        playDeadline = GetTime() + 1.5
+        showSignal(true)
     end
 end)
 
@@ -151,6 +162,8 @@ loader:SetScript("OnUpdate", function()
     if requestDeadline and GetTime() >= requestDeadline then
         finishRequest()
         showState("error", "Start the Windows companion and try again.")
+    elseif playDeadline and GetTime() >= playDeadline then
+        finishRequest()
     end
 end)
 

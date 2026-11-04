@@ -16,6 +16,10 @@ else:
 
 SECOND_ANIMATION_ID = 154  # Custom1 in AnimationData.dbc, unused by this HumanMale.
 SECOND_ANIMATION_PATH = r"Character\Human\Male\HumanMale0154-00.anim"
+SLOT_MEMBERS = {
+    client_poc.ANIMATION_ID: client_poc.ANIMATION_PATH,
+    SECOND_ANIMATION_ID: SECOND_ANIMATION_PATH,
+}
 SEQUENCES = 28
 SEQUENCE_LOOKUP = 36
 SEQUENCE_SIZE = 64
@@ -40,6 +44,12 @@ def append_aligned(model, payload):
     offset = len(model)
     model.extend(payload)
     return offset
+
+
+def slot_footer(slot):
+    # The footer is beyond all M2 track offsets and identifies a loaded .anim
+    # even if both slots currently contain exactly the same motion.
+    return sha256(f"WoWSpotlight duet slot {slot}".encode("ascii")).digest()
 
 
 def duplicate_slot(model):
@@ -89,11 +99,11 @@ def build_duet(archive_type, client_data, first_clip, second_clip, output):
                                        client_poc.ANIMATION_PATH, client_poc.ANIMATION_HASH)
     members = {client_poc.MODEL_PATH: duplicate_slot(model)}
     report = {}
-    for clip_path, member, slot in ((first_clip, client_poc.ANIMATION_PATH, client_poc.ANIMATION_ID),
-                                    (second_clip, SECOND_ANIMATION_PATH, SECOND_ANIMATION_ID)):
+    for slot, clip_path in zip(SLOT_MEMBERS, (first_clip, second_clip)):
+        member = SLOT_MEMBERS[slot]
         clip = json.loads(clip_path.read_text(encoding="utf-8"))
         baked, stats = client_poc.bake_clip(model, animation, clip)
-        members[member] = baked
+        members[member] = baked + slot_footer(slot)
         report[slot] = {**stats, "member": member, "animation_sha256": sha256(baked).hexdigest()}
 
     output.parent.mkdir(parents=True, exist_ok=True)

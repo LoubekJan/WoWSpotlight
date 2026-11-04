@@ -131,19 +131,20 @@ def has_unit_rotations(data):
     return True
 
 
-def replace_animation(process, source, replacement, tracks, translations):
+def replace_animation(process, source, replacement, tracks, translations, *, anchor_offset=0):
     spans = sorted([span for track in tracks.values() for span in track.ranges()] + translations)
     immutable = []
     cursor = 0
     for start, end in spans:
-        if start < cursor or end > len(source):
+        if not cursor <= start < end <= len(source):
             raise ValueError("Unexpected overlapping animation data.")
         immutable.append((cursor, start))
         cursor = end
     immutable.append((cursor, len(source)))
-    anchor = source[:ANCHOR_BYTES]
-    if immutable[0][1] < len(anchor):
-        raise ValueError("Expected immutable data at the start of the animation.")
+    anchor = source[anchor_offset:anchor_offset + ANCHOR_BYTES]
+    if not anchor or not any(start <= anchor_offset and anchor_offset + len(anchor) <= end
+                            for start, end in immutable):
+        raise ValueError("Expected an immutable animation anchor.")
 
     def matches_source(window):
         return (window is not None and len(window) == len(source)
@@ -159,13 +160,18 @@ def replace_animation(process, source, replacement, tracks, translations):
                 return False
         return all(window[start:end] in (source[start:end], bytes(end - start)) for start, end in translations)
 
+    if not matches_source(replacement) or not valid_tracks(replacement):
+        raise ValueError("The replacement animation does not match the verified track layout.")
+
     matches = set()
     for base, data in process.private_chunks(len(source) - 1):
         index = data.find(anchor)
         while index >= 0:
-            candidate = data[index:index + len(source)]
-            if matches_source(candidate) and valid_tracks(candidate):
-                matches.add(base + index)
+            start = index - anchor_offset
+            if start >= 0:
+                candidate = data[start:start + len(source)]
+                if matches_source(candidate) and valid_tracks(candidate):
+                    matches.add(base + start)
             index = data.find(anchor, index + 1)
 
     if len(matches) != 1:

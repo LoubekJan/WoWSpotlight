@@ -1,0 +1,4 @@
+## Interface: 30300
+## Title: Spotlight Viewer
+## Notes: Preloads both shared dance slots on the isolated Spotlight observer.
+SpotlightViewer.lua
