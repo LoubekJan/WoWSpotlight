@@ -159,6 +159,8 @@ def flex_forearm(model, animation, motion):
 def full_body_motion(clip, duration_ms):
     if clip.get("version") != 1 or clip.get("model") != "HumanMale":
         raise ValueError("Expected version 1 Spotlight motion for HumanMale.")
+    if type(clip.get("loop", False)) is not bool:
+        raise ValueError("Spotlight motion loop must be true or false.")
     frames = clip["frames"]
     if not 2 <= len(frames) <= 1800:
         raise ValueError("Spotlight motion requires 2 to 1,800 frames.")
@@ -188,13 +190,46 @@ def full_body_motion(clip, duration_ms):
     return times, rotations
 
 
+def mix_rotation(start, end, fraction):
+    if sum(a * b for a, b in zip(start, end)) < 0:
+        end = tuple(-value for value in end)
+    return normalized(tuple(a + fraction * (b - a) for a, b in zip(start, end)))
+
+
 def rotation_sample(times, rotations, timestamp):
     right = bisect_right(times, timestamp)
     if right == len(times):
         return rotations[-1]
     left = right - 1
     fraction = (timestamp - times[left]) / (times[right] - times[left])
-    return normalized(tuple(a + fraction * (b - a) for a, b in zip(rotations[left], rotations[right])))
+    return mix_rotation(rotations[left], rotations[right], fraction)
+
+
+def smoothstep(fraction):
+    return fraction * fraction * (3 - 2 * fraction)
+
+
+def loop_sample(times, rotations, timestamp, slot_duration):
+    end = times[-1]
+    blend = min(300, max(1, end // 4))
+    period = min(end + blend, slot_duration)
+    phase = timestamp % period
+    # Start smoothly from the same pose at which the previous cycle closed.
+    ease = min(80, end // 5)
+    if phase < ease:
+        progress = phase / ease
+        sample_time = phase * progress * (2 - progress)
+    else:
+        sample_time = min(phase, end)
+    rotation = rotation_sample(times, rotations, sample_time)
+    if phase > period - blend:
+        rotation = mix_rotation(rotation, rotations[0], smoothstep((phase - period + blend) / blend))
+
+    # If the native slot ends during a partial cycle, close that cycle too.
+    final_blend = min(blend, slot_duration % period)
+    if timestamp > slot_duration - final_blend:
+        rotation = mix_rotation(rotation, rotations[0], smoothstep((timestamp - slot_duration + final_blend) / final_blend))
+    return rotation
 
 
 def bake_full_body(model, animation, clip):
@@ -202,25 +237,34 @@ def bake_full_body(model, animation, clip):
     duration_ms = tracks[RIGHT_FOREARM].timestamps[-1]
     times, rotations = full_body_motion(clip, duration_ms)
     clip_end = times[-1]
+    loop = clip.get("loop", False)
     output = bytearray(animation)
     for bone, track in tracks.items():
         count = len(track.timestamps)
-        # A sparse stock track can miss the whole clip. Reallocate its existing keys
-        # to the captured portion of the sequence and hold at the stock slot end.
-        capture_count = min(count - (clip_end < duration_ms), clip_end + 1)
-        hold_count = count - capture_count
-        baked_times = [round(index * clip_end / (capture_count - 1)) for index in range(capture_count)]
-        baked_times.extend(clip_end + round(index * (duration_ms - clip_end) / hold_count)
-                           for index in range(1, hold_count + 1))
+        if loop:
+            baked_times = [round(index * duration_ms / (count - 1)) for index in range(count)]
+        else:
+            # Existing captures keep their original cadence and last-pose hold.
+            capture_count = min(count - (clip_end < duration_ms), clip_end + 1)
+            hold_count = count - capture_count
+            baked_times = [round(index * clip_end / (capture_count - 1)) for index in range(capture_count)]
+            baked_times.extend(clip_end + round(index * (duration_ms - clip_end) / hold_count)
+                               for index in range(1, hold_count + 1))
         struct.pack_into(f"<{count}I", output, track.time_offset, *baked_times)
+        previous = None
         for index, timestamp in enumerate(baked_times):
-            rotation = rotation_sample(times, rotations[bone], timestamp)
+            rotation = (loop_sample(times, rotations[bone], timestamp, duration_ms) if loop
+                        else rotation_sample(times, rotations[bone], timestamp))
+            if loop and previous is not None and sum(a * b for a, b in zip(previous, rotation)) < 0:
+                rotation = tuple(-value for value in rotation)
+            previous = rotation
             pack_rotation(output, track.key_offset + index * QUATERNION.size, rotation)
     # A rotation-only capture uses the bind translation for the moving root and hand.
     for start, end in translation_ranges(model):
         output[start:end] = bytes(end - start)
     return bytes(output), {"rotation_tracks": len(tracks), "rotation_keys": sum(len(t.timestamps) for t in tracks.values()),
-                           "slot_duration_ms": duration_ms, "capture_keys": len(times), "capture_duration_ms": clip_end}
+                           "slot_duration_ms": duration_ms, "capture_keys": len(times), "capture_duration_ms": clip_end,
+                           "loop": loop}
 
 
 def bake_clip(model, animation, clip):

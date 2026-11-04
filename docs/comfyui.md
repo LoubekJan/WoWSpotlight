@@ -22,3 +22,27 @@ MediaPipe v tomto PoC běží na CPU. Pokud ComfyUI obsluhuje GPU orchestrátor,
 Adresu vlastní instance předej pomocné aplikaci volbou `--comfy-url`, například `--comfy-url http://127.0.0.1:8188`. Při použití vlastní gateway musí `POST /api/upload/image` přijmout MP4 v poli `image` a `POST /api/prompt` musí umožnit uzlu `LoadVideo` hned použít nově nahraný soubor. Pomocná aplikace čeká na výsledek přes `GET /api/history/{id}` a stáhne JSON přes `GET /api/view`. Tyto cesty poskytuje i standardní ComfyUI 0.25.0. [API ComfyUI](https://github.com/Comfy-Org/ComfyUI/blob/v0.25.0/server.py) · [Uzel LoadVideo](https://github.com/Comfy-Org/ComfyUI/blob/v0.25.0/comfy_extras/nodes_video.py)
 
 Pro rychlou kontrolu po nasazení otevři `/api/object_info/SpotlightCapturePose` na adrese ComfyUI. Pokud vrátí popis uzlu, je uzel registrovaný. Úspěšný převod z herního panelu ověří i nahrání MP4, zařazení úlohy, stažení výsledku a přehrání.
+
+## Kvalita pohybu a smyčka
+
+Převod vyhlazuje spolehlivé body v časovém okolí každého snímku a dopočítává krátké výpadky. Uprostřed klipu toleruje odstup do 450 ms mezi spolehlivými vzorky jednotlivého bodu a do 350 ms mezi detekcemi celé postavy. Pro chodidla hledá nízké, dobře viditelné a téměř nehybné úseky v obraze. V nich omezuje posun kotníků korekcí kolene a kyčle při zachování délky končetin. Nejlépe funguje s pevnou kamerou a viditelnými chodidly. Animace probíhá na místě.
+
+Nově vytvořené klipy od 0,5 sekundy s alespoň pěti snímky mají ve výstupu příznak `loop`. Klient je opakuje v dostupném 17,7sekundovém slotu a na konci se plynule vrací do počáteční pózy. Knihovna zobrazuje délku zachyceného pohybu. Starší soubory bez příznaku lze přehrát s jejich původním časováním.
+
+Na stejných vstupních snímcích klesla odchylka rotací od průběhu mezi sousedními snímky. Tabulka uvádí 95. percentil této odchylky a největší skok rotace kosti mezi koncem a začátkem slotu.
+
+| Vstup | Odchylka rotací | Skok na konci slotu |
+| --- | --- | --- |
+| Taneční ukázka, 4,17 s | 12,72° → 4,11° | 72,23° → 0° |
+| Výřez taneční ukázky, 1,83 s | 9,44° → 3,16° | 55,18° → 0° |
+| Ukázka dřepu, 5,48 s | 13,80° → 4,94° | 57,57° → 0° |
+
+Zdroj nezávislého záběru dřepu je ukázka s vykreslenými body těla. [Dokumentace MediaPipe Pose](https://github.com/google-ai-edge/mediapipe/blob/master/docs/solutions/pose.md)
+
+V původním tanci i dřepu se kotníky v pravděpodobných oporách posouvaly méně. U krátkého výřezu se odhadovaný posun pravého chodidla zvýšil. Oporu odvozujeme z obrazu, takže jde o měření pohybu v souřadnicích modelu. Nový převod doplnil výpadek levé paže s 375ms odstupem mezi spolehlivými vzorky.
+
+Porovnání lze zopakovat se stejným vstupním záznamem bodů a výstupy obou převodů. `--client-data` přidá měření skutečných klíčů slotu 211 a odhad posunu chodidel.
+
+```powershell
+py -3.12 -B .\tools\dance_capture\measure_motion.py .\before.motion.json .\after.motion.json --pose .\input.pose.json --client-data 'C:\WoWModding\Client-Lab\Data'
+```

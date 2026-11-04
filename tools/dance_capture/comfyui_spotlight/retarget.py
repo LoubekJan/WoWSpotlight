@@ -1,7 +1,10 @@
 """Retarget one MediaPipe capture onto the verified WoW 3.3.5a HumanMale rig."""
 
 import numpy as np
+from scipy.interpolate import PchipInterpolator
 from scipy.spatial.transform import Rotation
+
+from .feet import stabilize_feet
 
 
 # Bind pivots from HumanMale.m2 in Client-Lab patch-3.MPQ (build 12340).
@@ -21,17 +24,48 @@ CORE_LANDMARKS = (11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28)
 OPTIONAL_LANDMARKS = (0, 7, 8, 17, 18, 19, 20, 31, 32)
 MIN_CONFIDENCE = 0.35
 MIN_COVERAGE = 0.75
-MAX_GAP_MS = 300
+MAX_EDGE_GAP_MS = 300
+MAX_POSE_GAP_MS = 350
+MAX_LANDMARK_GAP_MS = 450
+SMOOTH_SIGMA_MS = 38
+SMOOTH_WINDOW_MS = 100
 SLOT_DURATION_MS = 17_700
 UP = np.array([0.0, 0.0, 1.0])
+
+
+def short_gaps(times, observed, interior_limit):
+    return (len(observed) >= max(2, MIN_COVERAGE * len(times))
+            and observed[0] - times[0] <= MAX_EDGE_GAP_MS
+            and times[-1] - observed[-1] <= MAX_EDGE_GAP_MS
+            and np.diff(observed).max() <= interior_limit)
+
+
+def smooth_observations(times, points, confidence):
+    """Fit the position at each timestamp from a centered local linear fit."""
+    result = points.copy()
+    starts = np.searchsorted(times, times - SMOOTH_WINDOW_MS)
+    ends = np.searchsorted(times, times + SMOOTH_WINDOW_MS, side="right")
+    for index, (start, end) in enumerate(zip(starts, ends)):
+        if end - start < 3:
+            continue
+        offsets = (times[start:end] - times[index]) / SMOOTH_SIGMA_MS
+        weights = np.exp(-0.5 * offsets**2) * confidence[start:end]**2
+        total = weights.sum()
+        first = np.dot(weights, offsets)
+        second = np.dot(weights, offsets**2)
+        denominator = total * second - first**2
+        if denominator > 1e-8:
+            coefficients = weights * (second - first * offsets) / denominator
+            result[index] = coefficients @ points[start:end]
+    return result
 
 
 def recover_points(clip):
     if clip.get("format") != "mediapipe-pose-landmarks" or clip.get("version") != 1:
         raise ValueError("Expected a version 1 MediaPipe pose clip.")
     frames = clip["frames"]
-    if len(frames) < 2:
-        raise ValueError("At least two frames are required for retargeting.")
+    if not 2 <= len(frames) <= 1_800:
+        raise ValueError("Retargeting requires 2 to 1,800 frames.")
     times = [frame["time_ms"] for frame in frames]
     if times[0] != 0 or any(type(time) is not int for time in times) or any(
         first >= second for first, second in zip(times, times[1:])
@@ -40,13 +74,23 @@ def recover_points(clip):
     if times[-1] > SLOT_DURATION_MS:
         raise ValueError("The clip exceeds the 17.7-second HumanMale animation slot.")
 
+    times = np.asarray(times)
     raw = np.full((len(frames), 33, 5), np.nan)
+    image = np.full_like(raw, np.nan)
+    detected = np.zeros(len(frames), dtype=bool)
     for index, frame in enumerate(frames):
         if frame["pose"] is not None:
             points = np.asarray(frame["pose"]["world"], dtype=float)
             if points.shape != (33, 5):
                 raise ValueError("Each pose needs 33 world points with confidence values.")
             raw[index] = points
+            detected[index] = True
+            pixels = np.asarray(frame["pose"].get("image"), dtype=float)
+            if pixels.shape == (33, 5):
+                image[index] = pixels
+
+    if not short_gaps(times, times[detected], MAX_POSE_GAP_MS):
+        raise ValueError("Whole-body tracking was lost for too long. Keep the dancer in view.")
 
     # MediaPipe's front-facing, image-aligned axes become WoW forward, left, up.
     model_points = raw[:, :, [2, 0, 1]] * [-1, 1, -1]
@@ -54,17 +98,17 @@ def recover_points(clip):
     for index in CORE_LANDMARKS + OPTIONAL_LANDMARKS:
         samples = raw[:, index]
         valid = np.isfinite(samples).all(axis=1) & (samples[:, 3:] >= MIN_CONFIDENCE).all(axis=1)
-        observed = np.asarray(times)[valid]
-        has_coverage = len(observed) >= max(2, MIN_COVERAGE * len(times))
-        has_short_gaps = has_coverage and np.diff([times[0], *observed, times[-1]]).max() <= MAX_GAP_MS
-        if not has_short_gaps:
+        observed = times[valid]
+        if not short_gaps(times, observed, MAX_LANDMARK_GAP_MS):
             if index in CORE_LANDMARKS:
                 raise ValueError(f"Landmark {index} is obscured for too long. Keep the full body in view.")
             continue
-        for axis in range(3):
-            model_points[:, index, axis] = np.interp(times, observed, model_points[valid, index, axis])
+        confidence = np.clip(samples[valid, 3:].min(axis=1), 0.0, 1.0)
+        filtered = smooth_observations(observed, model_points[valid, index], confidence)
+        trajectory = PchipInterpolator(observed, filtered, axis=0)
+        model_points[:, index] = trajectory(np.clip(times, observed[0], observed[-1]))
         available.add(index)
-    return times, model_points, available
+    return times.tolist(), model_points, available, image
 
 
 def unit(vector):
@@ -96,18 +140,20 @@ def midpoint(first, second):
 
 
 def retarget_pose(clip):
-    times, model_points, available = recover_points(clip)
+    times, model_points, available, image = recover_points(clip)
     pivots = {bone: np.asarray(point) for bone, point in PIVOTS.items()}
     rest_left_hip, rest_right_hip = pivots[7], pivots[8]
     rest_left_shoulder, rest_right_shoulder = pivots[17], pivots[18]
     rest_torso = midpoint(rest_left_shoulder, rest_right_shoulder) - midpoint(rest_left_hip, rest_right_hip)
-    rest_pelvis = body_frame(rest_left_hip - rest_right_hip, UP)
+    rest_pelvis_inverse = body_frame(rest_left_hip - rest_right_hip, UP).inv()
     rest_chest = body_frame(rest_left_shoulder - rest_right_shoulder, rest_torso)
+    pelvis_frames = [body_frame(points[23] - points[24], UP) * rest_pelvis_inverse for points in model_points]
+    leg_directions = stabilize_feet(times, model_points, image, available, pivots, pelvis_frames)
     identity = Rotation.identity()
     frames = []
     previous = {}
 
-    for time, points in zip(times, model_points):
+    for frame, (time, points, pelvis) in enumerate(zip(times, model_points, pelvis_frames)):
         local = {}
         world = {0: identity}
 
@@ -123,7 +169,6 @@ def retarget_pose(clip):
         left_hip, right_hip = points[23], points[24]
         left_shoulder, right_shoulder = points[11], points[12]
         torso = midpoint(left_shoulder, right_shoulder) - midpoint(left_hip, right_hip)
-        pelvis = body_frame(left_hip - right_hip, UP) * rest_pelvis.inv()
         chest = body_frame(left_shoulder - right_shoulder, torso) * rest_chest.inv()
         place(1, 0, pelvis)
         place(2, 1, chest)
@@ -148,12 +193,13 @@ def retarget_pose(clip):
                 place(hand, lower, world[lower])
 
         # Lower limbs and foot pitch. This stage reproduces joint directions in place.
-        for hip, knee, ankle, toe, thigh, shin, foot, toe_pivot in (
-            (23, 25, 27, 31, 7, 14, 20, 32),
-            (24, 26, 28, 32, 8, 15, 22, 33),
+        for ankle, toe, thigh, shin, foot, toe_pivot in (
+            (27, 31, 7, 14, 20, 32),
+            (28, 32, 8, 15, 22, 33),
         ):
-            aim(thigh, 3, pivots[shin] - pivots[thigh], points[knee] - points[hip])
-            aim(shin, thigh, pivots[foot] - pivots[shin], points[ankle] - points[knee])
+            upper, lower = leg_directions[thigh]
+            aim(thigh, 3, pivots[shin] - pivots[thigh], upper[frame])
+            aim(shin, thigh, pivots[foot] - pivots[shin], lower[frame])
             if toe in available:
                 aim(foot, shin, pivots[toe_pivot] - pivots[foot], points[toe] - points[ankle])
             else:
@@ -176,7 +222,8 @@ def retarget_pose(clip):
             rotations[str(bone)] = quaternion.tolist()
         frames.append({"time_ms": time, "rotations": rotations})
 
-    return {"format": "wow-spotlight-motion", "version": 1, "model": "HumanMale", "frames": frames}
+    return {"format": "wow-spotlight-motion", "version": 1, "model": "HumanMale",
+            "loop": times[-1] >= 500 and len(frames) >= 5, "frames": frames}
 
 
 class SpotlightRetargetHumanMale:
