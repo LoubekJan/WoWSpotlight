@@ -33,6 +33,8 @@ Orchestrátor na AI World Lab vrací rozpoznané chyby vstupu Spotlightu jako v�
 
 Převod vyhlazuje spolehlivé body v časovém okolí každého snímku a dopočítává krátké výpadky. Uprostřed klipu toleruje odstup do 450 ms mezi spolehlivými vzorky jednotlivého bodu a do 350 ms mezi detekcemi celé postavy. Pro chodidla hledá nízké, dobře viditelné a téměř nehybné úseky v obraze. V nich omezuje posun kotníků korekcí kolene a kyčle při zachování délky končetin. Nejlépe funguje s pevnou kamerou a viditelnými chodidly. Animace probíhá na místě.
 
+Pokud převodu vadí prázdný okraj videa, Spotlight zkusí automaticky odříznout začátek nebo konec bez souvislé detekce postavy. Tak může zpracovat i klip se závěrečnou kartou sociální sítě. Při krátkém zakrytí lokte nebo zápěstí může doplnit méně jisté body uvnitř záběru, pokud je rameno stále vidět a zbytek pohybu paže je spolehlivě zachycený. Ve zbylém úseku musí sledování stále splnit limity pro výpadky celé postavy i jednotlivých kloubů.
+
 Nově vytvořené klipy od 0,5 sekundy s alespoň pěti snímky mají ve výstupu příznak `loop`. Klient je opakuje v dostupném 17,7sekundovém slotu a na konci se plynule vrací do počáteční pózy. Knihovna zobrazuje délku zachyceného pohybu. Starší soubory bez příznaku lze přehrát s jejich původním časováním.
 
 Na stejných vstupních snímcích klesla odchylka rotací od průběhu mezi sousedními snímky. Tabulka uvádí 95. percentil této odchylky a největší skok rotace kosti mezi koncem a začátkem slotu.

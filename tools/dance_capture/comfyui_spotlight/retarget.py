@@ -22,11 +22,19 @@ PIVOTS = {
 }
 CORE_LANDMARKS = (11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28)
 OPTIONAL_LANDMARKS = (0, 7, 8, 17, 18, 19, 20, 31, 32)
+ARM_SHOULDERS = {13: 11, 14: 12, 15: 11, 16: 12}
 MIN_CONFIDENCE = 0.35
 MIN_COVERAGE = 0.75
 MAX_EDGE_GAP_MS = 300
 MAX_POSE_GAP_MS = 350
 MAX_LANDMARK_GAP_MS = 450
+MAX_ARM_OCCLUSION_MS = 800
+MIN_ARM_COVERAGE = 0.85
+MIN_OCCLUDED_VISIBILITY = 0.20
+MIN_OCCLUDED_PRESENCE = 0.65
+MIN_EDGE_RUN_MS = 200
+MIN_TRIMMED_DURATION_MS = 1_000
+MIN_RETAINED_FRACTION = 0.5
 SMOOTH_SIGMA_MS = 38
 SMOOTH_WINDOW_MS = 100
 SLOT_DURATION_MS = 17_700
@@ -38,6 +46,44 @@ def short_gaps(times, observed, interior_limit):
             and observed[0] - times[0] <= MAX_EDGE_GAP_MS
             and times[-1] - observed[-1] <= MAX_EDGE_GAP_MS
             and np.diff(observed).max() <= interior_limit)
+
+
+def trim_untracked_edges(times, detected):
+    """Find sustained edge detections without cutting around a tracking gap in the dance."""
+    indices = np.flatnonzero(detected)
+    splits = np.flatnonzero(np.diff(times[indices]) > MAX_POSE_GAP_MS) + 1
+    runs = [run for run in np.split(indices, splits)
+            if len(run) >= 2 and times[run[-1]] - times[run[0]] >= MIN_EDGE_RUN_MS
+            and len(run) >= MIN_COVERAGE * (run[-1] - run[0] + 1)]
+    if not runs:
+        return slice(None)
+    first, last = runs[0][0], runs[-1][-1]
+    if times[first] - times[0] <= MAX_EDGE_GAP_MS:
+        first = 0
+    if times[-1] - times[last] <= MAX_EDGE_GAP_MS:
+        last = len(times) - 1
+    minimum = max(MIN_TRIMMED_DURATION_MS, MIN_RETAINED_FRACTION * (times[-1] - times[0]))
+    if times[last] - times[first] < minimum:
+        return slice(None)
+    return slice(first, last + 1)
+
+
+def recover_arm_observations(times, raw, image, index, valid):
+    """Use in-frame estimates to bridge short occlusions of an otherwise tracked arm."""
+    observed = times[valid]
+    if len(observed) < MIN_ARM_COVERAGE * len(times) or not short_gaps(times, observed, MAX_ARM_OCCLUSION_MS):
+        return valid
+    samples = raw[:, index]
+    shoulder = raw[:, ARM_SHOULDERS[index]]
+    xy = image[:, index, :2]
+    candidates = (np.isfinite(samples).all(axis=1) & np.isfinite(shoulder).all(axis=1)
+                  & (samples[:, 3] >= MIN_OCCLUDED_VISIBILITY) & (samples[:, 4] >= MIN_OCCLUDED_PRESENCE)
+                  & (shoulder[:, 3:] >= MIN_CONFIDENCE).all(axis=1) & ((xy >= 0) & (xy <= 1)).all(axis=1))
+    recovered = valid.copy()
+    for first, last in zip(observed, observed[1:]):
+        if last - first > MAX_LANDMARK_GAP_MS:
+            recovered |= candidates & (times > first) & (times < last)
+    return recovered
 
 
 def smooth_observations(times, points, confidence):
@@ -90,7 +136,12 @@ def recover_points(clip):
                 image[index] = pixels
 
     if not short_gaps(times, times[detected], MAX_POSE_GAP_MS):
-        raise ValueError("Whole-body tracking was lost for too long. Keep the dancer in view.")
+        window = trim_untracked_edges(times, detected)
+        times, detected = times[window], detected[window]
+        raw, image = raw[window], image[window]
+        times = times - times[0]
+        if not short_gaps(times, times[detected], MAX_POSE_GAP_MS):
+            raise ValueError("Whole-body tracking was lost for too long. Keep the dancer in view.")
 
     # MediaPipe's front-facing, image-aligned axes become WoW forward, left, up.
     model_points = raw[:, :, [2, 0, 1]] * [-1, 1, -1]
@@ -98,6 +149,8 @@ def recover_points(clip):
     for index in CORE_LANDMARKS + OPTIONAL_LANDMARKS:
         samples = raw[:, index]
         valid = np.isfinite(samples).all(axis=1) & (samples[:, 3:] >= MIN_CONFIDENCE).all(axis=1)
+        if index in ARM_SHOULDERS and not short_gaps(times, times[valid], MAX_LANDMARK_GAP_MS):
+            valid = recover_arm_observations(times, raw, image, index, valid)
         observed = times[valid]
         if not short_gaps(times, observed, MAX_LANDMARK_GAP_MS):
             if index in CORE_LANDMARKS:
