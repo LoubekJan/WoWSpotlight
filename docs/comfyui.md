@@ -41,6 +41,8 @@ Zdroj nezávislého záběru dřepu je ukázka s vykreslenými body těla. [Doku
 
 V původním tanci i dřepu se kotníky v pravděpodobných oporách posouvaly méně. U krátkého výřezu se odhadovaný posun pravého chodidla zvýšil. Oporu odvozujeme z obrazu, takže jde o měření pohybu v souřadnicích modelu. Nový převod doplnil výpadek levé paže s 375ms odstupem mezi spolehlivými vzorky.
 
+Na AI World Lab otevři `C:\WoWModding\SpotlightPoC\MotionQuality\WoW.exe`. Na přihlašovací obrazovce je vlevo původní animace a vpravo upravená. Obě animace i přihlašovací náhled jsou v `MotionQuality\Data\patch-Z.MPQ`.
+
 Porovnání lze zopakovat se stejným vstupním záznamem bodů a výstupy obou převodů. `--client-data` přidá měření skutečných klíčů slotu 211 a odhad posunu chodidel.
 
 ```powershell

@@ -4,7 +4,10 @@ import argparse
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
-from client_poc import DEFAULT_DATA, DEFAULT_STORMLIB
+if __package__:
+    from .client_poc import DEFAULT_DATA, DEFAULT_STORMLIB
+else:
+    from client_poc import DEFAULT_DATA, DEFAULT_STORMLIB
 
 
 LOGIN_SCRIPT = r"Interface\GlueXML\AccountLogin.lua"

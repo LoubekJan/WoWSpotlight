@@ -5,8 +5,8 @@ from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from client_poc import ANIMATION_ID, DEFAULT_DATA, DEFAULT_STORMLIB
-from duet_assets import SECOND_ANIMATION_ID
+from client_poc import DEFAULT_DATA, DEFAULT_STORMLIB
+from duet_assets import preview_login
 from preview_poc import LOGIN_SCRIPT
 
 
@@ -28,11 +28,7 @@ def main():
             raise ImportError("Pass the path to the StormLib Python wrapper.")
         stormlib = module_from_spec(spec)
         spec.loader.exec_module(stormlib)
-        with stormlib.Archive(args.client_data / "enUS" / "patch-enUS-3.MPQ") as archive:
-            login = archive.read(LOGIN_SCRIPT)
-        sequence = f"\r\nlocal duetSequenceA, duetSequenceB = {ANIMATION_ID}, {SECOND_ANIMATION_ID}\r\n"
-        preview = Path(__file__).with_suffix(".lua").read_bytes()
-        payload = login + sequence.encode("ascii") + preview
+        payload = preview_login(stormlib.Archive, args.client_data)
         output.parent.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(dir=output.parent) as work:
             staged = Path(work) / output.name

@@ -10,8 +10,10 @@ from tempfile import TemporaryDirectory
 
 if __package__:
     from . import client_poc
+    from .preview_poc import LOGIN_SCRIPT
 else:
     import client_poc
+    from preview_poc import LOGIN_SCRIPT
 
 
 SECOND_ANIMATION_ID = 154  # Custom1 in AnimationData.dbc, unused by this HumanMale.
@@ -92,7 +94,14 @@ def duplicate_slot(model):
     return bytes(result)
 
 
-def build_duet(archive_type, client_data, first_clip, second_clip, output):
+def preview_login(archive_type, client_data):
+    with archive_type(client_data / "enUS" / "patch-enUS-3.MPQ") as archive:
+        login = archive.read(LOGIN_SCRIPT)
+    sequence = f"\r\nlocal duetSequenceA, duetSequenceB = {client_poc.ANIMATION_ID}, {SECOND_ANIMATION_ID}\r\n"
+    return login + sequence.encode("ascii") + Path(__file__).with_name("duet_preview.lua").read_bytes()
+
+
+def build_duet(archive_type, client_data, first_clip, second_clip, output, *, preview=False):
     model = client_poc.read_source(archive_type, client_data / "patch-3.MPQ",
                                    client_poc.MODEL_PATH, client_poc.MODEL_HASH)
     animation = client_poc.read_source(archive_type, client_data / "patch-2.MPQ",
@@ -105,6 +114,8 @@ def build_duet(archive_type, client_data, first_clip, second_clip, output):
         baked, stats = client_poc.bake_clip(model, animation, clip)
         members[member] = baked + slot_footer(slot)
         report[slot] = {**stats, "member": member, "animation_sha256": sha256(baked).hexdigest()}
+    if preview:
+        members[LOGIN_SCRIPT] = preview_login(archive_type, client_data)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(dir=output.parent) as work:
@@ -125,6 +136,7 @@ def main():
     parser.add_argument("first_clip", type=Path, help="Clip for slot 211")
     parser.add_argument("second_clip", type=Path, help="Clip for slot 154")
     parser.add_argument("output", type=Path, help="New test MPQ outside the client")
+    parser.add_argument("--preview", action="store_true", help="Include the offline login-screen preview in the MPQ")
     parser.add_argument("--client-data", type=Path, default=client_poc.DEFAULT_DATA)
     parser.add_argument("--stormlib-module", type=Path, default=client_poc.DEFAULT_STORMLIB)
     args = parser.parse_args()
@@ -140,7 +152,8 @@ def main():
             raise ImportError("Pass the path to the StormLib Python wrapper.")
         stormlib = module_from_spec(spec)
         spec.loader.exec_module(stormlib)
-        report = build_duet(stormlib.Archive, args.client_data, args.first_clip, args.second_clip, output)
+        report = build_duet(stormlib.Archive, args.client_data, args.first_clip, args.second_clip, output,
+                            preview=args.preview)
     except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
         parser.exit(1, f"Duet MPQ generation failed: {error}\n")
     print(json.dumps({"archive": str(output), "slots": report}, indent=2))

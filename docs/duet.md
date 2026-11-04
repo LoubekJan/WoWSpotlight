@@ -61,11 +61,12 @@ Do složky `Data` vypnutého diváka vlož `patch-Z.MPQ`. Pokud už tento název
 
 Na připraveném počítači otevři `C:\WoWModding\SpotlightPoC\DuetPreview\WoW.exe`. Na přihlašovací obrazovce se zobrazí oba pohyby vedle sebe. Kliknutí na model jeho animaci pozastaví nebo obnoví.
 
-Pro vlastní kopii použij stejný `Data\patch-Z.MPQ` a sestav ještě balíček pro přihlašovací obrazovku. `patch-enUS-Z.MPQ` patří do `Data\enUS` samostatné vypnuté kopie pro náhled, kde je tento název volný.
+Pro vlastní náhled přidej při sestavení přepínač `--preview`. Výsledný `patch-Z.MPQ` obsahuje oba klipy i skript pro přihlašovací obrazovku. Vlož ho do `Data\patch-Z.MPQ` samostatné vypnuté kopie klienta. Pokud aktualizuješ starší náhled, odlož jeho původní balíčky mimo klienta. Starší verze měla skript náhledu v `Data\enUS\patch-enUS-Z.MPQ`.
 
 ```powershell
-py -3.12 -B .\tools\dance_capture\duet_preview.py `
-    .\artifacts\duet\patch-enUS-Z.MPQ --client-data 'C:\WoWModding\Client-Lab\Data'
+py -3.12 -B .\tools\dance_capture\duet_assets.py `
+    .\artifacts\duet\left-arm.motion.json .\artifacts\duet\right-arm.motion.json `
+    .\artifacts\duet-preview\patch-Z.MPQ --preview --client-data 'C:\WoWModding\Client-Lab\Data'
 ```
 
 Tato zkouška používá dva předem sestavené sloty a ruční přiřazení ke dvěma postavám. Pro přenos nových klipů za běhu použij [automatické sdílení](sharing.md).
