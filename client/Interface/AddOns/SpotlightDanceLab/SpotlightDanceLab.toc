@@ -1,0 +1,7 @@
+## X-Spotlight-Unified: 1
+## X-Spotlight-MultiRig: 1
+## Interface: 30300
+## Title: Spotlight Dance Lab
+## Notes: Use /spotlight to create, name and play saved dances through the Windows companion.
+
+SpotlightDanceLab.lua

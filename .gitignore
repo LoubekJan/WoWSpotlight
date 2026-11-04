@@ -4,7 +4,7 @@ __pycache__/
 .env
 .env.*
 
-/tools/dance_capture/vendor/
+/source/tools/dance_capture/vendor/
 /clients/
 /artifacts/
 *.exe
@@ -16,3 +16,21 @@ __pycache__/
 *.pose.json
 *.motion.json
 *.log
+*.token
+/server/relay-actors.json
+
+# The release client includes the generated patch, bootstrap, and embedded runtime.
+!/client/Data/patch-Z.MPQ
+!/client/dinput8.dll
+!/client/Spotlight/Companion/vendor/StormLib.dll
+!/client/Spotlight/Runtime/pythonw.exe
+!/client/Spotlight/Runtime/Lib/venv/scripts/nt/python.exe
+!/client/Spotlight/Runtime/Lib/venv/scripts/nt/pythonw.exe
+!/client/Spotlight/Runtime/tcl/nmake/x86_64-w64-mingw32-nmakehlp.exe
+!/client/Spotlight/Runtime/**/*.dll
+!/client/Spotlight/Runtime/DLLs/*.pyd
+/client/Data/enUS/realmlist.wtf
+/client/Cache/
+/client/WTF/
+/client/Spotlight/library/
+/client/Spotlight/shared/

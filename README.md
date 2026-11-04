@@ -1,33 +1,19 @@
-# WoWSpotlight
+# WoWSpotlight 1.0
 
-WoWSpotlight je PoC pro tvorbu vlastních tanců z videa ve WoW 3.3.5a. Hráč otevře panel příkazem `/spotlight`, vybere MP4 a po zpracování v ComfyUI najde klip v knihovně **My dances**. Klient načte animaci za běhu a připravený klient diváka si ji může [automaticky stáhnout](docs/sharing.md).
+WoWSpotlight přidává do World of Warcraft vlastní tance vytvořené z videa. V herním panelu `/spotlight` nahraješ MP4, vybereš hotový tanec z knihovny nebo galerie a spustíš ho tlačítkem **Play dance**. Spotlight přizpůsobí stejný klip kostře tanečníka a připraveným klientům v dosahu zobrazí správný tanec.
 
-Hotové animace z ComfyUI se automaticky zobrazí také ve [webové galerii AI World Labu](http://192.168.0.248:9093/). Ve hře otevři `/spotlight` → **Gallery**, klikni na **Download** u vybraného tance a pak ho spusť z **My dances**. [Provoz galerie v Dockeru](docs/gallery.md)
+Podporovaný klient je **WoW 3.3.5a enUS, build 12340, pro Windows**. Tance fungují v základní podobě všech deseti hratelných ras a obou pohlaví. Běžný `/dance` má samostatný animační slot.
 
-## Spuštění v čistém klientu
+| Chci | Použiju |
+|---|---|
+| Hrát | [Hotové soubory v `client/`](client/) a [návod pro hráče](source/docs/player-files.md) |
+| Nasadit služby | [Postup pro správce v `server/`](server/README.md) |
+| Upravit kód nebo sestavit klienta | [Zdrojový kód v `source/`](source/) a [návod na sestavení](source/docs/player-files.md#sestavení-klienta-ze-zdrojů) |
 
-Zkopíruj obsah `C:\WoWSpotlight\artifacts\player-files` do čistého klienta WoW 3.3.5a enUS a spusť jeho `WoW.exe`. Přihlas se za lidskou mužskou postavu, nech WoW v režimu okna a otevři `/spotlight`. Stejný klient automaticky přehrává sdílené tance ostatních. [Přesný postup pro lab](docs/player-files.md)
+## Hráč
 
-## Moje tance
+1. Zavři WoW a zkopíruj celý obsah `client/` vedle svého `WoW.exe`.
+2. Spusť `WoW.exe`, přihlas se na realm s nasazenými službami Spotlightu, přepni do režimu okna a zadej `/spotlight`.
+3. Použij **Upload video** pro vytvoření tance nebo **Gallery** → **Download** pro stažení existujícího. V **My dances** vyber klip a klikni na **Play dance**.
 
-1. Klikni na **Upload video** a vyber MP4 s jedním tanečníkem. Hotový klip se uloží do **My dances**. Po neúspěšném převodu tlačítko **Retry conversion** zopakuje převod stejného videa v aktuální relaci pomocné aplikace. Pokud během převodu přepneš do jiné aplikace, stav se zobrazí po návratu do WoW.
-2. Kliknutím na uložený tanec jej načti. Pro přejmenování uprav pole **Selected dance name** a klikni na **Rename**. Po zobrazení **Your dance is ready** klikni na **Play dance**.
-
-Knihovna je ve složce klienta pod `Spotlight\library` a ukládá se zvlášť pro každou postavu podle jejího GUID. Po dalším přihlášení stačí vybrat uložený tanec. Knihovna se plní převody z této verze. Pro starší klip v `Spotlight\active.pose.json` použij [ruční postup](tools/dance_capture/live_lab/README.md#ruční-ověření-s-divákem). Průběh a chyby pomocné aplikace jsou v `Logs\SpotlightBridge.log`.
-
-## První instalace
-
-Složka `artifacts` obsahuje místní výstupy sestavené z dat klienta. Návody níže zahrnují i starší samostatné testy jednotlivých částí.
-
-- [Sestavení souborů pro společný klient](docs/player-files.md#sestavení-souborů-pro-lab)
-- [Starší zkouška s odděleným klientem diváka](tools/dance_capture/live_lab/README.md)
-- [Instalace uzlů a workflow v ComfyUI](docs/comfyui.md)
-- [Původní extraktor a náhled animace bez realmu](tools/dance_capture/README.md)
-- [Duet na testovacím realmu a samostatný náhled](docs/duet.md)
-- [Automatické sdílení a přehrávání u diváka](docs/sharing.md)
-
-Pro sestavení klientských souborů potřebuješ data WoW a knihovnu StormLib. Model MediaPipe patří na server s ComfyUI. Zdrojové soubory zahrnují doplněk do WoW, pomocnou aplikaci pro Windows, nástroje pro sestavení klientských souborů, uzly ComfyUI a workflow.
-
-## Rozsah PoC
-
-Spotlight podporuje všech deset hratelných ras WoW 3.3.5a enUS build 12340 v základní podobě a obě pohlaví. ComfyUI zpracuje nejvýše prvních 17,7 sekundy videa a vytvoří rotační stopy pro 20 kostí. Klient převádí společný klip na kostru postavy při načtení. Pohyb probíhá na místě. Automatické sdílení podporuje dva tanečníky současně v připraveném klientu diváka.
+Spotlight při startu použije hostitele z `Data\enUS\realmlist.wtf`. Výchozí porty jsou `8188` pro ComfyUI, `9093` pro galerii a `8765` pro sdílení ve hře. V `Spotlight\settings.json` můžeš jednotlivé adresy přepsat pomocí `comfy_url`, `gallery_url` a `relay_url`.

@@ -1,0 +1,2 @@
+# Preserve the exact bytes of the copy-ready client, including its embedded runtime.
+/client/** -text

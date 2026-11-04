@@ -1,0 +1,13 @@
+**
+!source/
+!source/gallery/
+!source/gallery/server.py
+!source/gallery/import_comfy.py
+!source/gallery/web/
+!source/gallery/web/**
+!source/tools/
+!source/tools/dance_capture/
+!source/tools/dance_capture/arm_motion.py
+!source/tools/dance_capture/client_poc.py
+!source/tools/dance_capture/spotlight_http.py
+!source/tools/dance_capture/spotlight_library.py
