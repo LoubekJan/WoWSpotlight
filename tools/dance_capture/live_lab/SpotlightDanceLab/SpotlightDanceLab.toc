@@ -1,0 +1,5 @@
+## Interface: 30300
+## Title: Spotlight Dance Lab
+## Notes: Use /spotlight to upload a dance video and play it through the Windows companion.
+
+SpotlightDanceLab.lua
