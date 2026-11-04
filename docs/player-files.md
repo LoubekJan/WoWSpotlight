@@ -5,9 +5,11 @@ Na AI World Lab jsou hotové soubory v `C:\WoWSpotlight\artifacts\player-files`.
 Spotlight přijímá původní podepsaný `WoW.exe` pro enUS build 12340 a ověřené varianty stejného buildu. Před připojením kontroluje také animační data a instrukce klienta, které používá.
 
 1. Vypni čistou kopii WoW **3.3.5a enUS build 12340**. Zkopíruj celý **obsah** složky `player-files` tam, kde je `WoW.exe`. `Data\enUS\realmlist.wtf` nastaví připojení k AI World Lab.
-2. Spusť `WoW.exe`, přihlas se za lidskou mužskou postavu a použij režim okna. Zadej `/spotlight`, vyber **Upload video** a po zpracování použij **Play dance**. Sdílené tance postav v dosahu na stejném realmu se načítají automaticky.
+2. Spusť `WoW.exe`, přihlas se za libovolnou z deseti hratelných ras a použij režim okna. Zadej `/spotlight`, vyber **Upload video** a po zpracování použij **Play dance**. Sdílené tance postav v dosahu na stejném realmu se načítají automaticky.
 
 Vlastní tanec spustíš tlačítkem **Play dance**. Příkaz `/dance` přehraje běžný tanec WoW i po načtení vlastního klipu. Každý klient má prostor pro vlastní tanec a dva současně sledované tanečníky.
+
+Při přechodu ze starší verze použij celý nový balíček včetně `Data\patch-Z.MPQ`. Pro přehrání použij základní podobu postavy. Divák použije kostru tanečníka, takže klip správně přiřadí i postavě jiné rasy nebo pohlaví.
 
 Pro stažení hotového tance otevři `/spotlight` → **Gallery** a klikni na řádek s **Download**. Přepni na **My dances**, vyber stažený tanec a po načtení stiskni **Play dance**. Webovou galerii otevřeš na síti AI World Labu. [Galerie Spotlight](http://192.168.0.248:9093/)
 

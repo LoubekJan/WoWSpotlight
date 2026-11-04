@@ -5,7 +5,6 @@ from queue import Empty, SimpleQueue
 from threading import Event, Lock
 from time import monotonic
 
-import client_poc
 import duet_runtime
 import duet_select
 import runtime_poc
@@ -23,6 +22,7 @@ class SpotlightSession:
         self.viewer = None
         self.error = None
         self.playback = SimpleQueue()
+        self.prepared_actor = None
 
     def close(self):
         self.closed.set()
@@ -40,12 +40,15 @@ class SpotlightSession:
             viewer.configure()
         manager = duet_select.object_manager(process)
         snapshot = duet_select.actor_snapshot(process, manager, guid)
+        rig = snapshot.get("rig")
+        if custom and (not rig or self.prepared_actor != (guid, rig)):
+            return False
         if snapshot.get("emote_state") != NATIVE_DANCE or snapshot.get("stand_state") != 0:
             return not custom
-        if not custom and snapshot.get("active_animation") != client_poc.ANIMATION_ID:
+        if not custom and snapshot.get("active_animation") != viewer.runtime.local_slot:
             return True
 
-        slot = client_poc.ANIMATION_ID if custom else STOCK_DANCE_ANIMATION
+        slot = viewer.runtime.local_slot if custom else STOCK_DANCE_ANIMATION
         switched = False
         try:
             if custom:
@@ -70,7 +73,8 @@ class SpotlightSession:
         if duet_select.active_guid(process) == guid:
             snapshot = duet_select.actor_snapshot(process, duet_select.object_manager(process), guid)
             emote = snapshot.get("emote_state")
-            if emote is None or emote == NATIVE_DANCE and snapshot.get("stand_state") == 0:
+            if emote is None or (emote == NATIVE_DANCE and snapshot.get("stand_state") == 0
+                                 and self.prepared_actor == (guid, snapshot.get("rig"))):
                 return
         viewer.local_guid = 0
         viewer.configure()
@@ -78,7 +82,7 @@ class SpotlightSession:
     def watch(self, pid):
         try:
             runtime = duet_runtime.DuetRuntime(pid, self.client_dir, self.stormlib_module)
-            remote_slots = tuple(slot for slot in runtime.slots if slot != client_poc.ANIMATION_ID)
+            remote_slots = tuple(slot for slot in runtime.slots if slot != runtime.local_slot)
             if len(remote_slots) != 2:
                 raise ValueError("Install the unified Spotlight Data\\patch-Z.MPQ with all three animation slots.")
             with runtime_poc.ClientProcess(pid, runtime.executable) as process:
@@ -97,7 +101,7 @@ class SpotlightSession:
                 self.viewer = Viewer(process, runtime, self.relay, self.client_dir / "Spotlight" / "shared",
                                      slots=remote_slots)
                 self.ready.set()
-                logging.info("Spotlight local and shared animation slots are ready.")
+                logging.info("Spotlight local and shared animation slots are ready for %d rigs.", len(runtime.rigs))
                 pending = None
                 try:
                     while not self.closed.is_set() and process.read(duet_select.IMAGE_BASE, 2) == b"MZ":
@@ -144,9 +148,13 @@ class SpotlightSession:
                 raise ValueError("The active character changed before the dance could be loaded.")
             manager = duet_select.object_manager(viewer.process)
             snapshot = duet_select.actor_snapshot(viewer.process, manager, guid)
-            if viewer.local_guid == guid or snapshot.get("active_animation") == client_poc.ANIMATION_ID:
+            rig = snapshot.get("rig")
+            if rig not in viewer.runtime.rigs:
+                raise ValueError("Use a supported player character in its normal form.")
+            if viewer.local_guid == guid or snapshot.get("active_animation") == viewer.runtime.local_slot:
                 raise ValueError("Stop the current Spotlight dance before loading another one.")
-            report = viewer.runtime.apply(client_poc.ANIMATION_ID, motion)
+            report = viewer.runtime.apply(viewer.runtime.local_slot, motion, rig=rig)
             if duet_select.active_guid(viewer.process) != guid:
                 raise ValueError("The active character changed before the dance could be selected.")
+            self.prepared_actor = (guid, rig)
             return report

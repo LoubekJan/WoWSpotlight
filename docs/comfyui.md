@@ -19,6 +19,8 @@ MediaPipe v tomto PoC běží na CPU. Pokud ComfyUI obsluhuje GPU orchestrátor,
 
 Na AI World Labu importér průběžně publikuje hotové animace z této složky do společné galerie. Klipy z převodu spuštěného ve hře i z workflow v ComfyUI procházejí stejným importem. [Galerie Spotlight](gallery.md)
 
+Kostra `HumanMale` je společný formát klipů. Klient WoW při přehrávání převádí rotace na základní model konkrétní postavy, takže jeden klip z galerie lze použít pro všechny hratelné rasy a obě pohlaví.
+
 ## Připojení hry
 
 Adresu vlastní instance předej pomocné aplikaci volbou `--comfy-url`, například `--comfy-url http://127.0.0.1:8188`. Při použití vlastní gateway musí `POST /api/upload/image` přijmout MP4 v poli `image` a `POST /api/prompt` musí umožnit uzlu `LoadVideo` hned použít nově nahraný soubor. Pomocná aplikace čeká na výsledek přes `GET /api/history/{id}` a stáhne JSON přes `GET /api/view`. Tyto cesty poskytuje i standardní ComfyUI 0.25.0. [API ComfyUI](https://github.com/Comfy-Org/ComfyUI/blob/v0.25.0/server.py) · [Uzel LoadVideo](https://github.com/Comfy-Org/ComfyUI/blob/v0.25.0/comfy_extras/nodes_video.py)

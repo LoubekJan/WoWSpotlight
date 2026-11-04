@@ -236,8 +236,12 @@ def bake_full_body(model, animation, clip):
     tracks = full_body_tracks(model, animation)
     duration_ms = tracks[RIGHT_FOREARM].timestamps[-1]
     times, rotations = full_body_motion(clip, duration_ms)
+    return bake_rotations(animation, tracks, translation_ranges(model), times, rotations, duration_ms,
+                          loop=clip.get("loop", False))
+
+
+def bake_rotations(animation, tracks, translations, times, rotations, duration_ms, *, loop):
     clip_end = times[-1]
-    loop = clip.get("loop", False)
     output = bytearray(animation)
     for bone, track in tracks.items():
         count = len(track.timestamps)
@@ -260,7 +264,7 @@ def bake_full_body(model, animation, clip):
             previous = rotation
             pack_rotation(output, track.key_offset + index * QUATERNION.size, rotation)
     # A rotation-only capture uses the bind translation for the moving root and hand.
-    for start, end in translation_ranges(model):
+    for start, end in translations:
         output[start:end] = bytes(end - start)
     return bytes(output), {"rotation_tracks": len(tracks), "rotation_keys": sum(len(t.timestamps) for t in tracks.values()),
                            "slot_duration_ms": duration_ms, "capture_keys": len(times), "capture_duration_ms": clip_end,

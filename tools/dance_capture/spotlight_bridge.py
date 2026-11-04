@@ -469,7 +469,10 @@ class SpotlightBridge:
             if self.session and self.session_thread is None:
                 self.session_thread = Thread(target=self.session.watch, args=(pid,), daemon=True)
                 self.session_thread.start()
-            if self.publisher and self.publisher_thread is None:
+            viewer = self.session.viewer if self.session else None
+            if self.publisher and self.publisher_thread is None and (not self.session or viewer):
+                if viewer:
+                    self.publisher.animation = viewer.runtime.local_slot
                 self.publisher_thread = Thread(target=self.publisher.watch, args=(pid, self.game.executable), daemon=True)
                 self.publisher_thread.start()
             try:
@@ -565,8 +568,7 @@ def main(argv=None, *, session_factory=None, game_pid=None):
             raise ValueError("Spotlight potřebuje původní WoW 3.3.5a enUS (build 12340) nebo ověřenou variantu klienta.")
         if args.relay_url:
             token = read_token(args.relay_token_file) if args.relay_token_file else None
-            publisher = Publisher(Relay(args.relay_url, token), realm_auth=args.realm_auth,
-                                  animation=client_poc.ANIMATION_ID if session_factory else None)
+            publisher = Publisher(Relay(args.relay_url, token), realm_auth=args.realm_auth)
         logs = client_dir / "Logs"
         logs.mkdir(exist_ok=True)
         logging.basicConfig(filename=logs / "SpotlightBridge.log", encoding="utf-8", level=logging.INFO,

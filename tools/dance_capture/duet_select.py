@@ -9,11 +9,12 @@ import struct
 import time
 
 if __package__:
-    from . import client_poc, duet_assets, runtime_poc
+    from . import client_poc, duet_assets, runtime_poc, spotlight_rigs
 else:
     import client_poc
     import duet_assets
     import runtime_poc
+    import spotlight_rigs
 
 
 IMAGE_BASE = 0x400000
@@ -37,19 +38,21 @@ MEM_RELEASE = 0x8000
 PAGE_EXECUTE_READ = 0x20
 PAGE_EXECUTE_READWRITE = 0x40
 PROCESS_READ_RIGHTS = 0x0410  # Query information and read process memory.
-SELECTOR_SIGNATURE = b"WoWDUET3"
+SELECTOR_SIGNATURE = b"WoWDUET4"
 GENERATION = len(SELECTOR_SIGNATURE)
 BANKS = 0x20
-SLOT_ORDER = (client_poc.ANIMATION_ID, duet_assets.SECOND_ANIMATION_ID, duet_assets.THIRD_ANIMATION_ID)
+SLOT_ORDER = (client_poc.ANIMATION_ID, duet_assets.SECOND_ANIMATION_ID,
+              duet_assets.THIRD_ANIMATION_ID, spotlight_rigs.LOCAL_SLOT)
 BANK = struct.Struct("<" + "QII" * len(SLOT_ORDER))
 ANIMATE_CODE = 0x200
-REQUEST = 0x80
+REQUEST = 0xA0
 REQUEST_DATA = struct.Struct("<QIIII")
 PENDING, RUNNING, APPLIED, SKIPPED = range(1, 5)
 REQUEST_TTL_MS = 500
 SLOT_DURATION_MS = 17_700
 MARKER = "WoWSpotlight duet lab"
 SLOTS = set(SLOT_ORDER)
+PLAYER_TYPE_MASK = 0x10
 
 
 def near_jump(source, target):
@@ -98,6 +101,8 @@ def selector_code(address):
     code.add("81 78 08", client_poc.ANIMATION_ID)
     code.branch("0f 85", "fallback")
     code.label("actors")
+    code.add("f6 41 08 10")  # OBJECT_FIELD_TYPE must include TYPEMASK_PLAYER.
+    code.branch("0f 84", "fallback")
     state = address + PAGE
     code.add("8b 1d", state + GENERATION)  # mov ebx, [generation]
     code.add(f"89 da 83 e2 01 6b d2 {BANK.size:02x}")  # edx = (ebx & 1) * bank size
@@ -151,6 +156,8 @@ def animate_code(address):
     code.branch("0f 85", "done")
     code.add("8b 41 04 3b 05", guid + 4)
     code.branch("0f 85", "done")
+    code.add("f6 41 08 10")  # Only seek a player object's base animation.
+    code.branch("0f 84", "done")
     code.add("b8", PENDING)
     code.add("ba", RUNNING)
     code.add("f0 0f b1 15", request)  # lock cmpxchg [state], edx
@@ -160,6 +167,13 @@ def animate_code(address):
     code.add("83 b8 34 01 00 00 0a")  # replicated emote must still be dance
     code.branch("0f 85", "skipped")
     code.add("8b 3d", guid + 8)  # expected animation
+    code.add("83 ff 45")  # Restoring stock dance is also safe on a transformed player.
+    code.branch("0f 84", "model")
+    code.add("8b 90 f4 00 00 00 85 d2")  # current display id must be present and native
+    code.branch("0f 84", "skipped")
+    code.add("3b 90 f8 00 00 00")
+    code.branch("0f 85", "skipped")
+    code.label("model")
 
     for retry in (False, True):
         code.add("8b 8e b4 00 00 00 85 c9")  # ECX = current world model
@@ -262,12 +276,25 @@ def unit_emote(process, unit):
 def actor_snapshot(process, manager, guid):
     unit = lookup_unit(process, manager, guid)
     if not unit:
-        return {"loaded": False}
+        return {"loaded": False, "rig": None}
+    descriptor = read_u32(process, unit + 0x08)
+    if not descriptor or not read_u32(process, descriptor + 0x08) & PLAYER_TYPE_MASK:
+        return {"loaded": False, "rig": None}
     model = read_u32(process, unit + 0xB4)
     emote, stand = unit_emote(process, unit)
     state = read_u32(process, model + 0x94) if model else 0
     result = {"loaded": True, "emote_state": emote, "stand_state": stand,
-              "model": f"0x{model:08X}" if model else None}
+              "model": f"0x{model:08X}" if model else None, "rig": None}
+    fields = read_u32(process, unit + 0xD0)
+    if fields:
+        # UNIT_FIELD_BYTES_0 and the two consecutive display-id fields in UNIT data.
+        race_class_gender = read_u32(process, fields + 0x44)
+        race = race_class_gender & 0xFF
+        gender = (race_class_gender >> 16) & 0xFF
+        display, native_display = struct.unpack("<II", read_exact(process, fields + 0xF4, 8))
+        result.update(race=race, gender=gender, display_id=display, native_display_id=native_display)
+        if display and display == native_display and race in spotlight_rigs.RACE_MODELS and gender in (0, 1):
+            result["rig"] = spotlight_rigs.RACE_MODELS[race] + ("Male", "Female")[gender]
     if state:
         # CM2Model::GetAnimation(-1) at 0x8266B0 reads base state record 0.
         data = read_exact(process, state, 0x98)
@@ -296,7 +323,7 @@ def selector_address(process):
         raise ValueError("The client's emote resolver has unexpected instructions.")
     address = (HOOK + 5 + struct.unpack_from("<i", site, 1)[0]) & 0xFFFFFFFF
     signature = read_exact(process, address + PAGE, len(SELECTOR_SIGNATURE))
-    if signature == b"WoWDUET2":
+    if signature in (b"WoWDUET2", b"WoWDUET3"):
         raise ValueError("Restart WoW to replace the previous Spotlight selector.")
     if signature != SELECTOR_SIGNATURE:
         raise ValueError("The emote resolver points to an unrecognized selector.")
@@ -465,7 +492,7 @@ def install(process, actors, kernel):
         code = selector_code(address)
         timing_code = animate_code(address)
         if (len(code) > ANIMATE_CODE or ANIMATE_CODE + len(timing_code) > PAGE
-                or BANKS + 2 * BANK.size > REQUEST):
+                or BANKS + 2 * BANK.size > REQUEST or REQUEST + 4 + REQUEST_DATA.size > PAGE):
             raise ValueError("The Spotlight selector no longer fits its memory layout.")
         state = SELECTOR_SIGNATURE.ljust(BANKS, b"\0") + pack_bank(actors) + bytes(BANK.size)
         process.write(address + PAGE, state)

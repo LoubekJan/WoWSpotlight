@@ -9,16 +9,15 @@ import sys
 from tempfile import TemporaryDirectory
 
 import client_poc
-import duet_assets
-from make_duet_clips import LEFT_ARM, wave_clip
+import duet_multirig
 from stormlib import Archive, DLL_PATH
 
 
 TOOLS = Path(__file__).resolve().parent
 COMPANION = (
-    "arm_motion", "client_poc", "duet_assets", "duet_runtime", "duet_select", "preview_poc", "runtime_poc",
+    "arm_motion", "client_poc", "duet_assets", "duet_multirig", "duet_runtime", "duet_select", "preview_poc", "runtime_poc",
     "spotlight_bridge", "spotlight_client", "spotlight_comfy", "spotlight_gallery", "spotlight_http", "spotlight_ipc",
-    "spotlight_library", "spotlight_publish", "spotlight_session", "spotlight_viewer", "stormlib",
+    "spotlight_library", "spotlight_publish", "spotlight_rigs", "spotlight_session", "spotlight_viewer", "stormlib",
 )
 
 
@@ -55,12 +54,9 @@ def build_files(client_data, bootstrap, output, settings, realmlist):
         addon_destination.mkdir(parents=True)
         copy2(addon_source / f"{addon}.lua", addon_destination)
         toc = (addon_source / f"{addon}.toc").read_text(encoding="utf-8")
-        (addon_destination / f"{addon}.toc").write_text("## X-Spotlight-Unified: 1\n" + toc, encoding="utf-8")
-
-        # Placeholder tracks remain hidden until each slot receives a player clip.
-        seed = work / "placeholder.motion.json"
-        seed.write_text(json.dumps(wave_clip(LEFT_ARM, 1)), encoding="utf-8")
-        duet_assets.build_duet(Archive, client_data, seed, seed, files / "Data" / "patch-Z.MPQ", third_clip=seed)
+        metadata = "## X-Spotlight-Unified: 1\n## X-Spotlight-MultiRig: 1\n"
+        (addon_destination / f"{addon}.toc").write_text(metadata + toc, encoding="utf-8")
+        duet_multirig.build_multirig(Archive, client_data, files / "Data" / "patch-Z.MPQ")
         realm_file = files / "Data" / "enUS" / "realmlist.wtf"
         realm_file.parent.mkdir()
         realm_file.write_text(f"set realmlist {realmlist}\n", encoding="ascii")

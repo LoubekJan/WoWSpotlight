@@ -2,6 +2,11 @@ local modelPath = "Character\\Human\\Male\\HumanMale.m2"
 local loader = CreateFrame("Frame", nil, UIParent)
 local panel = CreateFrame("Frame", "SpotlightDancePanel", UIParent)
 local unifiedClient = GetAddOnMetadata("SpotlightDanceLab", "X-Spotlight-Unified") == "1"
+local multiRig = unifiedClient and GetAddOnMetadata("SpotlightDanceLab", "X-Spotlight-MultiRig") == "1"
+local races = {"Human", "Orc", "Dwarf", "NightElf", "Scourge", "Tauren", "Gnome", "Troll", "BloodElf", "Draenei"}
+local sexes = {"Male", "Female"}
+local preloadSlots = multiRig and {156, 154, 155} or (unifiedClient and {211, 154, 155} or {211})
+local preloadQueue, preloadIndex
 local states = {
     idle = "Choose a dance video from your computer.",
     waiting = "Waiting for Spotlight to open the file picker...",
@@ -634,6 +639,44 @@ local function bindBridge()
     bridgeBound = true
 end
 
+local function preloadModel(path, slot)
+    -- Keep the model shown so the selected sequence stays loaded in the asset cache.
+    local model = CreateFrame("Model", nil, loader)
+    model:SetSize(1, 1)
+    model:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
+    model:SetFrameStrata("BACKGROUND")
+    model:EnableMouse(false)
+    model:SetModel(path)
+    model:SetSequence(slot)
+    table.insert(loader.preloadedModels, model)
+end
+
+local function prepareModels()
+    loader.preloadedModels = {}
+    if not multiRig then
+        for _, slot in ipairs(preloadSlots) do preloadModel(modelPath, slot) end
+        return
+    end
+
+    local _, race = UnitRace("player")
+    race = race and race:gsub("%s", ""):lower()
+    if race == "undead" or race == "forsaken" then race = "scourge" end
+    local sex = sexes[(UnitSex("player") or 1) - 1]
+    preloadQueue, preloadIndex = {}, 1
+    for _, raceName in ipairs(races) do
+        for _, sexName in ipairs(sexes) do
+            local path = ("Character\\%s\\%s\\%s%s.m2"):format(raceName, sexName, raceName, sexName)
+            for _, slot in ipairs(preloadSlots) do
+                if race == raceName:lower() and sex == sexName then
+                    preloadModel(path, slot)
+                else
+                    table.insert(preloadQueue, {path, slot})
+                end
+            end
+        end
+    end
+end
+
 renderEntries()
 showState("idle")
 
@@ -648,6 +691,7 @@ loader:SetScript("OnEvent", function(self, event, message)
         stockDeadline = nil
         spotlightPlayed = false
         activeProof, queuedProof, proofSignalUntil = nil, nil, nil
+        preloadQueue = nil
         return
     elseif event == "UI_INFO_MESSAGE" then
         local nonce = realmNonce(message)
@@ -664,22 +708,20 @@ loader:SetScript("OnEvent", function(self, event, message)
     end
     self:UnregisterEvent("PLAYER_LOGIN")
 
-    -- Keep the models shown so their selected sequences stay loaded.
-    self.preloadedModels = {}
-    for _, slot in ipairs(unifiedClient and {211, 154, 155} or {211}) do
-        local model = CreateFrame("Model", nil, self)
-        model:SetSize(1, 1)
-        model:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
-        model:SetFrameStrata("BACKGROUND")
-        model:EnableMouse(false)
-        model:SetModel(modelPath)
-        model:SetSequence(slot)
-        self.preloadedModels[slot] = model
-    end
+    prepareModels()
     if InCombatLockdown() then self:RegisterEvent("PLAYER_REGEN_ENABLED") else bindBridge() end
 end)
 
 loader:SetScript("OnUpdate", function()
+    if preloadQueue then
+        local nextModel = preloadQueue[preloadIndex]
+        if nextModel then
+            preloadModel(nextModel[1], nextModel[2])
+            preloadIndex = preloadIndex + 1
+        else
+            preloadQueue = nil
+        end
+    end
     local now = GetTime()
     if proofSignalUntil and now >= proofSignalUntil then
         signalMarker:Hide()

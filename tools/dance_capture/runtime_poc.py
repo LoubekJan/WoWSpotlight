@@ -141,7 +141,7 @@ def has_unit_rotations(data):
 
 
 def replace_animation(process, source, replacement, tracks, translations, *, anchor_offset=0):
-    spans = sorted([span for track in tracks.values() for span in track.ranges()] + translations)
+    spans = sorted([span for track in tracks.values() for span in track.ranges()] + list(translations))
     immutable = []
     cursor = 0
     for start, end in spans:
@@ -184,7 +184,7 @@ def replace_animation(process, source, replacement, tracks, translations, *, anc
             index = data.find(anchor, index + 1)
 
     if len(matches) != 1:
-        raise TrackNotReadyError(f"Expected one resident Human Male animation track, found {len(matches)}. Open the preview first.")
+        raise TrackNotReadyError(f"Expected one resident Spotlight animation, found {len(matches)}. Wait for the model to load.")
     address = matches.pop()
     window = process.read(address, len(source))
     if not matches_source(window) or not valid_tracks(window):

@@ -30,4 +30,4 @@ Pro sestavení klientských souborů potřebuješ data WoW a knihovnu StormLib. 
 
 ## Rozsah PoC
 
-Ověřeno na Windows s klientem WoW 3.3.5a enUS build 12340 a kostrou `HumanMale`. ComfyUI zpracuje nejvýše prvních 17,7 sekundy videa a vytvoří rotační stopy pro 20 kostí. Pohyb probíhá na místě. Automatické sdílení podporuje dva tanečníky současně v připraveném klientu diváka.
+Spotlight podporuje všech deset hratelných ras WoW 3.3.5a enUS build 12340 v základní podobě a obě pohlaví. ComfyUI zpracuje nejvýše prvních 17,7 sekundy videa a vytvoří rotační stopy pro 20 kostí. Klient převádí společný klip na kostru postavy při načtení. Pohyb probíhá na místě. Automatické sdílení podporuje dva tanečníky současně v připraveném klientu diváka.

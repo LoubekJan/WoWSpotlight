@@ -4,7 +4,7 @@ Po kliknutí na **Play dance** klient přehraje vlastní klip a oznámí jeho za
 
 - **ID klipu** je SHA-256 souboru s tancem. Každý divák ověří obsah proti tomuto ID i při načtení z místní mezipaměti.
 - **ID přehrání** vznikne při každém spuštění, i když hráč znovu použije stejný klip. Služba k němu přiřadí GUID tanečníka a čas začátku. Podle něj naváže divák, který dorazí později, na aktuální část smyčky.
-- **Sloty animací** jsou 69 pro běžný `/dance`, 211 pro vlastní tanec a 154 a 155 pro dva současně sledované tanečníky. Načtení klipu pouze připraví slot 211. Pohybem hráč ukončí vlastní tanec a sdílení. Příkaz `/dance` přepne na běžný tanec a ukončí sdílení.
+- **Sloty animací** jsou 69 pro běžný `/dance`, 156 pro vlastní tanec a 154 a 155 pro dva současně sledované tanečníky. Každý z dvaceti základních modelů má vlastní trojici slotů Spotlightu. Pohybem hráč ukončí vlastní tanec a sdílení. Příkaz `/dance` přepne na běžný tanec a ukončí sdílení.
 
 V jednom klientu WoWSpotlight probíhá tvorba i sledování tanců automaticky po startu hry. Na AI World Labu si klient po načtení klipu k přehrání vyžádá oprávnění ke sdílení pro právě přihlášenou postavu. Realm jí doručí jednorázový ověřovací kód a doplněk jej předá pomocné aplikaci na pozadí. Následující kroky patří k dřívější zkoušce s oddělenými klienty a ručními tokeny. [Společný klient](player-files.md)
 
@@ -57,4 +57,4 @@ Pro jiný lab spusť `tools/dance_capture/spotlight_relay.py --actors <actors.js
 
 Na AI World Lab divák vstoupil do světa až po rozběhnutí dvou různých tanců a automaticky stáhl oba klipy. Každá postava měla vlastní aktivní slot. V 98 pozorováních za 30 sekund se fáze přehrávaná divákem lišila od času služby nejvýše o 31 ms. Po zastavení prvního tanečníka druhý pokračoval. Samostatně prošel i tok z panelu `/spotlight` od výběru MP4 přes ComfyUI a **Play dance** po ověřený soubor a přehrávání v klientu diváka.
 
-Zkouška pokrývá dvě současné postavy `HumanMale` na jednom realmu. Klipy stáhne připravený klient se spuštěnou pomocnou aplikací.
+Tato zkouška proběhla s dřívějším balíčkem a dvěma postavami `HumanMale` na jednom realmu. Aktuální klient používá stejné ID a čas přehrání pro všechny podporované kostry.

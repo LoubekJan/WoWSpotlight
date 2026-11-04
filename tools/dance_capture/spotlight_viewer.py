@@ -36,6 +36,7 @@ def event_key(event):
 class Assignment:
     event: DanceEvent
     slot: int
+    rig: str
     synced_model: str | None = None
     next_sync: float = 0.0
 
@@ -57,16 +58,17 @@ class Viewer:
     def configure(self):
         actors = [(guid, assignment.slot) for guid, assignment in self.assignments.items()]
         if self.local_guid:
-            actors.append((self.local_guid, client_poc.ANIMATION_ID))
+            actors.append((self.local_guid, self.runtime.local_slot))
         actors = tuple(sorted(actors))
         if actors != self.configured:
             duet_select.configure(self.process, actors)
             self.configured = actors
 
     def release(self, manager):
-        for slot, guid in tuple(self.retired.items()):
+        for slot, assignment in tuple(self.retired.items()):
+            guid = assignment.event.guid
             snapshot = duet_select.actor_snapshot(self.process, manager, guid)
-            if (snapshot.get("active_animation") != slot
+            if (snapshot.get("rig") != assignment.rig or snapshot.get("active_animation") != slot
                     or snapshot.get("emote_state") == NATIVE_DANCE
                     and duet_select.sync_actor(self.process, manager, guid, STOCK_DANCE_ANIMATION, 0)):
                 del self.retired[slot]
@@ -89,29 +91,31 @@ class Viewer:
                 previous_emote = self.observed_emotes.get(key)
                 if guid == observer or (previous_emote is not None and previous_emote != NATIVE_DANCE):
                     continue
-                if not duet_select.lookup_unit(self.process, manager, guid):
+                snapshot = duet_select.actor_snapshot(self.process, manager, guid)
+                if snapshot.get("rig") not in self.runtime.rigs:
                     continue
-                if previous_emote == NATIVE_DANCE:
-                    snapshot = duet_select.actor_snapshot(self.process, manager, guid)
-                    emote = snapshot.get("emote_state")
-                    if emote is not None and emote != NATIVE_DANCE:
-                        self.observed_emotes[key] = emote
-                        logging.info("Observed the end of Spotlight event %s for 0x%016X.", event.event_id, guid)
-                        continue
-                    snapshots[guid] = snapshot
+                emote = snapshot.get("emote_state")
+                if previous_emote == NATIVE_DANCE and emote is not None and emote != NATIVE_DANCE:
+                    self.observed_emotes[key] = emote
+                    logging.info("Observed the end of Spotlight event %s for 0x%016X.", event.event_id, guid)
+                    continue
+                snapshots[guid] = snapshot
                 events[guid] = event
 
         for guid, assignment in tuple(self.assignments.items()):
             event = events.get(guid)
-            if event is None or event_key(event) != event_key(assignment.event):
-                self.retired[assignment.slot] = guid
+            if (event is None or event_key(event) != event_key(assignment.event)
+                    or snapshots[guid]["rig"] != assignment.rig):
+                self.retired[assignment.slot] = assignment
                 del self.assignments[guid]
         self.configure()
         self.release(manager)
 
         for guid, event in events.items():
+            snapshot = snapshots[guid]
+            rig = snapshot["rig"]
             if guid not in self.assignments:
-                if guid in self.retired.values():
+                if any(guid == old.event.guid for old in self.retired.values()):
                     continue  # Wait until the old native sequence has released its slot.
                 free = next((slot for slot in self.slots
                              if slot not in self.retired
@@ -120,20 +124,17 @@ class Viewer:
                     continue
                 try:
                     clip = self.relay.cached_clip(self.cache, event.clip_id)
-                    report = self.runtime.apply(free, clip)
-                    logging.info("Loaded event %s clip %s for 0x%016X in slot %d, baked SHA-256 %s.",
-                                 event.event_id, event.clip_id, guid, free, report["animation_sha256"])
+                    report = self.runtime.apply(free, clip, rig=rig)
+                    logging.info("Loaded event %s clip %s for 0x%016X (%s) in slot %d, baked SHA-256 %s.",
+                                 event.event_id, event.clip_id, guid, rig, free, report["animation_sha256"])
                 except (OSError, RelayError, URLError, runtime_poc.TrackNotReadyError) as error:
                     logging.debug("Waiting for clip/slot %d: %s", free, error)
                     continue
                 if event.expires_at_ms <= self.state.now_ms():
                     continue
-                self.assignments[guid] = Assignment(event, free)
+                self.assignments[guid] = Assignment(event, free, rig)
                 self.configure()
             assignment = self.assignments[guid]
-            snapshot = snapshots.get(guid)
-            if snapshot is None:
-                snapshot = duet_select.actor_snapshot(self.process, manager, guid)
             model = snapshot.get("model")
             dancing = snapshot.get("emote_state") == NATIVE_DANCE and snapshot.get("stand_state") == 0
             if dancing:
@@ -189,7 +190,8 @@ def main():
         with exclusive_viewer(args.pid), runtime_poc.ClientProcess(args.pid, executable) as process:
             duet_select.verify_image(process)
             duet_select.install_once(process, args.pid, ())
-            viewer = Viewer(process, runtime, relay, client / "Spotlight" / "shared")
+            slots = tuple(slot for slot in runtime.slots if slot != runtime.local_slot) if runtime.multirig else SLOTS
+            viewer = Viewer(process, runtime, relay, client / "Spotlight" / "shared", slots=slots)
             logging.info("Spotlight viewer is ready. Enter the world in WoW.")
             try:
                 while True:
