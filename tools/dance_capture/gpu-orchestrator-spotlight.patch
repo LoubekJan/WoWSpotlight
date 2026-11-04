@@ -1,0 +1,50 @@
+diff --git a/orchestrator/adapters.py b/orchestrator/adapters.py
+--- a/orchestrator/adapters.py
++++ b/orchestrator/adapters.py
+@@ -22,1 +22,5 @@
++class SpotlightInputError(BackendError):
++    """Spotlight rejected the clip while the ComfyUI worker remained healthy."""
++
++
+ class UncertainBackendError(BackendError):
+@@ -185,6 +189,21 @@
+                 failed_event = isinstance(messages, list) and any(
+                     isinstance(message, (list, tuple)) and message
+                     and message[0] in {"execution_error", "execution_interrupted"} for message in messages)
+                 if status.get("status_str") in {"error", "failed", "interrupted"} or failed_event:
++                    if isinstance(messages, list):
++                        for event in reversed(messages):
++                            if (not isinstance(event, (list, tuple)) or len(event) != 2
++                                    or event[0] != "execution_error" or not isinstance(event[1], dict)):
++                                continue
++                            detail = event[1]
++                            reason = detail.get("exception_message")
++                            if (detail.get("node_type") in {"SpotlightCapturePose", "SpotlightRetargetHumanMale"}
++                                    and detail.get("exception_type") in {"ValueError", "builtins.ValueError"}
++                                    and isinstance(reason, str) and re.fullmatch(
++                                        r"Landmark \d{1,2} is obscured for too long\. Keep the full body in view\."
++                                        r"|Whole-body tracking was lost for too long\. Keep the dancer in view\."
++                                        r"|No person was detected\. Use a well-lit video with the full body in view\.",
++                                        reason.strip())):
++                                raise SpotlightInputError(reason.strip())
+                     raise BackendError("ComfyUI generation failed or was interrupted")
+                 if status.get("status_str") == "success" and status.get("completed") is True:
+diff --git a/orchestrator/scheduler.py b/orchestrator/scheduler.py
+--- a/orchestrator/scheduler.py
++++ b/orchestrator/scheduler.py
+@@ -15,3 +15,3 @@
+-from .adapters import make_adapter
++from .adapters import SpotlightInputError, make_adapter
+ from .config import Settings, app_variants, configured_app
+ from .locking import InstanceLock
+@@ -754,6 +754,10 @@
+             if job_id is not None:
+                 requested = bool(self.store.get(job_id).get("cancel_requested"))
+                 self.store.update(job_id, state="cancelled" if requested else "interrupted",
+                                   error=None if stopped else "Container stop unconfirmed; GPUs remain reserved", finished_at=time.time())
++        except SpotlightInputError as error:
++            if not self._closed:
++                self.store.update(job_id, state="failed", error=str(error), finished_at=time.time())
++                self.store.set_app(app_id, last_used=time.time(), error=None)
+         except Exception as error:
+             if self._closed:

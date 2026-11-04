@@ -23,6 +23,8 @@ Adresu vlastní instance předej pomocné aplikaci volbou `--comfy-url`, napří
 
 Pro rychlou kontrolu po nasazení otevři `/api/object_info/SpotlightCapturePose` na adrese ComfyUI. Pokud vrátí popis uzlu, je uzel registrovaný. Úspěšný převod z herního panelu ověří i nahrání MP4, zařazení úlohy, stažení výsledku a přehrání.
 
+Orchestrátor na AI World Lab vrací rozpoznané chyby vstupu Spotlightu jako výsledek jednotlivé úlohy. Při ztrátě sledování nebo chybějící postavě zůstává worker připravený na další video. Integrace pro místní GPU orchestrátor je v [patchi](../tools/dance_capture/gpu-orchestrator-spotlight.patch).
+
 ## Kvalita pohybu a smyčka
 
 Převod vyhlazuje spolehlivé body v časovém okolí každého snímku a dopočítává krátké výpadky. Uprostřed klipu toleruje odstup do 450 ms mezi spolehlivými vzorky jednotlivého bodu a do 350 ms mezi detekcemi celé postavy. Pro chodidla hledá nízké, dobře viditelné a téměř nehybné úseky v obraze. V nich omezuje posun kotníků korekcí kolene a kyčle při zachování délky končetin. Nejlépe funguje s pevnou kamerou a viditelnými chodidly. Animace probíhá na místě.
