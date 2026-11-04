@@ -462,6 +462,7 @@ end
 renderLibrary()
 showState("idle")
 
+local unifiedClient = GetAddOnMetadata("SpotlightDanceLab", "X-Spotlight-Unified") == "1"
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("PLAYER_LOGOUT")
 loader:SetScript("OnEvent", function(self, event)
@@ -476,16 +477,18 @@ loader:SetScript("OnEvent", function(self, event)
     end
     self:UnregisterEvent("PLAYER_LOGIN")
 
-    -- Keep the model shown so it retains its selected sequence.
-    local model = CreateFrame("Model", nil, self)
-    self.preloadedModel = model
-    model:SetWidth(1)
-    model:SetHeight(1)
-    model:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
-    model:SetFrameStrata("BACKGROUND")
-    model:EnableMouse(false)
-    model:SetModel(modelPath)
-    model:SetSequence(211)
+    -- Keep the models shown so their selected sequences stay loaded.
+    self.preloadedModels = {}
+    for _, slot in ipairs(unifiedClient and {211, 154, 155} or {211}) do
+        local model = CreateFrame("Model", nil, self)
+        model:SetSize(1, 1)
+        model:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", 0, 0)
+        model:SetFrameStrata("BACKGROUND")
+        model:EnableMouse(false)
+        model:SetModel(modelPath)
+        model:SetSequence(slot)
+        self.preloadedModels[slot] = model
+    end
     if InCombatLockdown() then self:RegisterEvent("PLAYER_REGEN_ENABLED") else bindBridge() end
 end)
 
@@ -498,7 +501,8 @@ loader:SetScript("OnUpdate", function()
     end
     if requestDeadline and now >= requestDeadline then
         endRequest()
-        showState("error", "Start the Windows companion and try again.")
+        showState("error", unifiedClient and "Spotlight did not respond. Check Logs/SpotlightBridge.log."
+            or "Start the Windows companion and try again.")
     elseif playDeadline and now >= playDeadline then
         signalMarker:Hide()
         playDeadline = nil

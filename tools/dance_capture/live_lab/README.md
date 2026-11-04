@@ -30,7 +30,7 @@
    ```
 
    Balíček mapuje běžný herní tanec na slot 211. Doplněk drží slot připravený v paměti a po stisku **Play dance** spustí herní emoci `/dance`.
-5. Připrav [ComfyUI](../../../docs/comfyui.md) a pokračuj [spuštěním panelu ve hře](../../../README.md#spuštění-připraveného-klienta). Pokud jsi doplněk aktualizoval ve spuštěném klientu, zadej `/reload`.
+5. Připrav [ComfyUI](../../../docs/comfyui.md) a z kořene projektu spusť `& '.\Start Spotlight.cmd' --client-dir $actor --comfy-url 'http://192.168.0.248:8188'`. Přihlas se za lidskou mužskou postavu, nech WoW v režimu okna a zadej `/spotlight`.
 
 ## Ruční ověření s divákem
 

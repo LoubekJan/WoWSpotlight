@@ -2,6 +2,8 @@
 
 Po kliknutí na **Play dance** pomocná aplikace oznámí ID hotového klipu a začátek tance službě Spotlight. Realm dál přenáší běžnou herní emoci. Klient diváka spojí oba údaje podle GUID postavy, stáhne klip a načte jej za běhu. Pokud divák přijde později, naváže na aktuální fázi smyčky podle času služby.
 
+V jednom klientu WoWSpotlight probíhá tvorba i sledování tanců automaticky po startu hry. Pro publikování ulož token postavy do `Spotlight\relay.token`. Následující kroky pro tanečníka a diváka patří k dřívější zkoušce s oddělenými klienty. [Společný klient](player-files.md)
+
 ## Tanečník
 
 1. Použij připravený klient s doplňkem `SpotlightDanceLab` a mapováním `/dance` z [první instalace](../tools/dance_capture/live_lab/README.md). Na labu už jsou připravené `LiveActor` a obě kopie `Duet\ActorA` a `Duet\ActorB`.
@@ -36,8 +38,6 @@ Pro technickou zkoušku s hotovým souborem lze místo panelu spustit `spotlight
 3. Přijď k tanečníkům. Klient stáhne potřebné klipy sám. Stažené soubory najdeš pod `Observer\Spotlight\shared`. Po skončení můžeš příkaz ukončit pomocí `Ctrl+C` a zavřít divákův WoW.
 
 ### Příprava další kopie diváka
-
-Na AI World Lab můžeš zkopírovat hotové soubory ze složky projektu. [Ruční příprava diváka](player-files.md#sledování-sdílených-tanců)
 
 Použij izolovaný klient WoW 3.3.5a enUS build 12340. Vytvoř soubor `SpotlightDuet.lab` a znovu sestav `Data\patch-Z.MPQ` podle [návodu pro duet](duet.md#příprava-dalších-testovacích-kopií). Aktuální generátor označuje každý slot, aby jej šlo jednoznačně najít a vyměnit za běhu. Do `Interface\AddOns` diváka zkopíruj celou složku `tools\dance_capture\live_lab\SpotlightViewer`. Divák používá původní mapování `/dance` ze základní hry.
 

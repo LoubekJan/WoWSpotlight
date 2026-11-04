@@ -91,13 +91,15 @@ class GameWindow:
         self.kernel.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
         self.kernel.OpenProcess.restype = wintypes.HANDLE
         self.kernel.CloseHandle.argtypes = (wintypes.HANDLE,)
+        self.kernel.WaitForSingleObject.argtypes = (wintypes.HANDLE, wintypes.DWORD)
+        self.kernel.WaitForSingleObject.restype = wintypes.DWORD
         self.kernel.CreateMutexW.argtypes = (ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
         self.kernel.CreateMutexW.restype = wintypes.HANDLE
         self.kernel.QueryFullProcessImageNameW.argtypes = (
             wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
         )
 
-    def locate(self):
+    def locate(self, expected_pid=None):
         matches = []
 
         @self.enum_callback
@@ -106,6 +108,8 @@ class GameWindow:
                 return True
             pid = wintypes.DWORD()
             self.user.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            if expected_pid is not None and pid.value != expected_pid:
+                return True
             handle = self.kernel.OpenProcess(0x1000, False, pid.value)
             if not handle:
                 return True
@@ -123,6 +127,15 @@ class GameWindow:
         if len(matches) > 1:
             raise ValueError("Ze složky LiveActor nech spuštěné právě jedno okno WoW.")
         return next(iter(matches), None)
+
+    def process_alive(self, pid):
+        handle = self.kernel.OpenProcess(0x100000, False, pid)  # SYNCHRONIZE
+        if not handle:
+            return False
+        try:
+            return self.kernel.WaitForSingleObject(handle, 0) == 258  # WAIT_TIMEOUT
+        finally:
+            self.kernel.CloseHandle(handle)
 
     def can_input(self, hwnd):
         # Wait until the intended game window has focus and modifiers are released.
@@ -222,9 +235,10 @@ class GameWindow:
             if memory:
                 self.gdi.DeleteDC(memory)
 
-    def lock(self):
+    def lock(self, pid=None):
         name = sha256(str(self.executable).casefold().encode()).hexdigest()
-        mutex = self.kernel.CreateMutexW(None, False, f"Local\\WoWSpotlight-{name}")
+        suffix = f"-{pid}" if pid is not None else ""
+        mutex = self.kernel.CreateMutexW(None, False, f"Local\\WoWSpotlight-{name}{suffix}")
         error = ctypes.get_last_error()
         if not mutex:
             raise ctypes.WinError(error)
@@ -235,7 +249,7 @@ class GameWindow:
 
 
 class SpotlightBridge:
-    def __init__(self, root, game, client_dir, base_url, stormlib_module, publisher):
+    def __init__(self, root, game, client_dir, base_url, stormlib_module, publisher, session=None, game_pid=None):
         self.root, self.game, self.client_dir, self.base_url = root, game, client_dir, base_url
         self.stormlib_module = stormlib_module
         self.events = SimpleQueue()
@@ -253,6 +267,9 @@ class SpotlightBridge:
         self.page = 1
         self.publisher = publisher
         self.publisher_thread = None
+        self.session = session
+        self.session_thread = None
+        self.game_pid = game_pid
         samples = client_dir.parent / "Clips"
         self.video_dir = samples if samples.is_dir() else Path.home()
 
@@ -273,7 +290,10 @@ class SpotlightBridge:
             shared_clip = self.publisher.relay.upload(motion) if self.publisher else None
             if self.player(pid) != guid:
                 raise ValueError("The active character changed before the dance could be loaded.")
-            applied = runtime_poc.apply(pid, self.client_dir, motion, self.stormlib_module)
+            if self.session:
+                applied = self.session.load(guid, motion)
+            else:
+                applied = runtime_poc.apply(pid, self.client_dir, motion, self.stormlib_module)
             motion.replace(active)
         if self.publisher:
             self.publisher.prepare(guid, shared_clip)
@@ -385,7 +405,10 @@ class SpotlightBridge:
         try:
             window = self.last_window
             if window is None:
-                window = self.game.locate()
+                if self.game_pid is not None and not self.game.process_alive(self.game_pid):
+                    self.root.destroy()
+                    return
+                window = self.game.locate(self.game_pid)
             elif not self.game.is_current(*window):
                 self.root.destroy()
                 return
@@ -396,6 +419,9 @@ class SpotlightBridge:
         if window:
             self.last_window = window
             hwnd, pid = window
+            if self.session and self.session_thread is None:
+                self.session_thread = Thread(target=self.session.watch, args=(pid,), daemon=True)
+                self.session_thread.start()
             if self.publisher and self.publisher_thread is None:
                 self.publisher_thread = Thread(target=self.publisher.watch, args=(pid, self.game.executable), daemon=True)
                 self.publisher_thread.start()
@@ -443,7 +469,7 @@ class SpotlightBridge:
         self.root.after(250, self.poll)
 
 
-def main():
+def main(argv=None, *, session_factory=None, game_pid=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--client-dir", type=Path, default=runtime_poc.DEFAULT_CLIENT)
     parser.add_argument("--comfy-url", default=DEFAULT_COMFY_URL)
@@ -451,7 +477,7 @@ def main():
     parser.add_argument("--relay-url", help="Optional Spotlight relay for sharing dances")
     parser.add_argument("--relay-token-file", type=Path, help="Private token for this test character")
     parser.add_argument("--launch", action="store_true", help="Start the test client if its window is closed")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if os.name != "nt":
         parser.error("The Spotlight game companion requires Windows.")
     if bool(args.relay_url) != bool(args.relay_token_file):
@@ -480,8 +506,8 @@ def main():
         logging.basicConfig(filename=logs / "SpotlightBridge.log", encoding="utf-8", level=logging.INFO,
                             format="%(asctime)s %(levelname)s %(message)s")
         game = GameWindow(executable)
-        mutex = game.lock()
-        if game.locate() is None:
+        mutex = game.lock(game_pid)
+        if game_pid is None and game.locate() is None:
             if not args.launch:
                 raise ValueError("Spusť nejdřív WoW z testovací složky LiveActor.")
             subprocess.Popen([str(executable)], cwd=client_dir)
@@ -491,12 +517,18 @@ def main():
         messagebox.showerror("Spotlight", str(error), parent=root)
         root.destroy()
         return
-    bridge = SpotlightBridge(root, game, client_dir, args.comfy_url, args.stormlib_module.resolve(), publisher)
+    stormlib_module = args.stormlib_module.resolve()
+    session = session_factory(client_dir, stormlib_module) if session_factory else None
+    bridge = SpotlightBridge(root, game, client_dir, args.comfy_url, stormlib_module, publisher, session, game_pid)
     logging.info("Spotlight is waiting for requests from %s", executable)
     root.after(250, bridge.poll)
     try:
         root.mainloop()
     finally:
+        if session:
+            session.close()
+            if bridge.session_thread:
+                bridge.session_thread.join(timeout=4)
         if publisher:
             publisher.close()
             if bridge.publisher_thread:

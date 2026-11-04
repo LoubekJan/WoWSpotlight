@@ -1,4 +1,4 @@
-"""Bake two distinct HumanMale animation slots into a test-client MPQ."""
+"""Bake two or three distinct HumanMale animation slots into a test-client MPQ."""
 
 import argparse
 from hashlib import sha256
@@ -18,10 +18,13 @@ else:
 
 SECOND_ANIMATION_ID = 154  # Custom1 in AnimationData.dbc, unused by this HumanMale.
 SECOND_ANIMATION_PATH = r"Character\Human\Male\HumanMale0154-00.anim"
+THIRD_ANIMATION_ID = 155  # Custom2 in AnimationData.dbc, also unused.
+THIRD_ANIMATION_PATH = r"Character\Human\Male\HumanMale0155-00.anim"
 SLOT_MEMBERS = {
     client_poc.ANIMATION_ID: client_poc.ANIMATION_PATH,
     SECOND_ANIMATION_ID: SECOND_ANIMATION_PATH,
 }
+UNIFIED_SLOT_MEMBERS = {**SLOT_MEMBERS, THIRD_ANIMATION_ID: THIRD_ANIMATION_PATH}
 SEQUENCES = 28
 SEQUENCE_LOOKUP = 36
 SEQUENCE_SIZE = 64
@@ -54,26 +57,28 @@ def slot_footer(slot):
     return sha256(f"WoWSpotlight duet slot {slot}".encode("ascii")).digest()
 
 
-def duplicate_slot(model):
+def duplicate_slot(model, *, third=False):
     if sha256(model).hexdigest() != client_poc.MODEL_HASH:
         raise ValueError("Use the verified 12340 HumanMale model.")
 
     sequence_count, sequence_offset = ARRAY.unpack_from(model, SEQUENCES)
     lookup_count, lookup_offset = ARRAY.unpack_from(model, SEQUENCE_LOOKUP)
     original_index = UINT16.unpack_from(model, lookup_offset + client_poc.ANIMATION_ID * 2)[0]
-    lookup_entry = lookup_offset + SECOND_ANIMATION_ID * 2
-    if SECOND_ANIMATION_ID >= lookup_count or UINT16.unpack_from(model, lookup_entry)[0] != 0xFFFF:
-        raise ValueError("The secondary animation lookup is not empty.")
-
+    extra_slots = (SECOND_ANIMATION_ID, THIRD_ANIMATION_ID) if third else (SECOND_ANIMATION_ID,)
+    new_sequence_count = sequence_count + len(extra_slots)
     start = sequence_offset + original_index * SEQUENCE_SIZE
-    duplicate = bytearray(model[start:start + SEQUENCE_SIZE])
-    UINT16.pack_into(duplicate, 0, SECOND_ANIMATION_ID)
-    UINT16.pack_into(duplicate, 62, sequence_count)  # The sequence aliases only itself.
     result = bytearray(model)
     new_sequence_offset = append_aligned(result, model[sequence_offset:sequence_offset + sequence_count * SEQUENCE_SIZE])
-    result.extend(duplicate)
-    ARRAY.pack_into(result, SEQUENCES, sequence_count + 1, new_sequence_offset)
-    UINT16.pack_into(result, lookup_entry, sequence_count)
+    for sequence_index, slot in enumerate(extra_slots, start=sequence_count):
+        lookup_entry = lookup_offset + slot * 2
+        if slot >= lookup_count or UINT16.unpack_from(model, lookup_entry)[0] != 0xFFFF:
+            raise ValueError(f"The animation lookup for slot {slot} is not empty.")
+        duplicate = bytearray(model[start:start + SEQUENCE_SIZE])
+        UINT16.pack_into(duplicate, 0, slot)
+        UINT16.pack_into(duplicate, 62, sequence_index)  # The sequence aliases only itself.
+        result.extend(duplicate)
+        UINT16.pack_into(result, lookup_entry, sequence_index)
+    ARRAY.pack_into(result, SEQUENCES, new_sequence_count, new_sequence_offset)
 
     for header, stride, track_offsets, array_count in TRACKS:
         record_count, offset = ARRAY.unpack_from(model, header)
@@ -88,9 +93,10 @@ def duplicate_slot(model):
                     if count != sequence_count:
                         raise ValueError("Unexpected per-sequence track array size.")
                     entry = start + original_index * ARRAY.size
-                    descriptors = model[start:start + count * ARRAY.size] + model[entry:entry + ARRAY.size]
+                    descriptor = model[entry:entry + ARRAY.size]
+                    descriptors = model[start:start + count * ARRAY.size] + descriptor * len(extra_slots)
                     new_offset = append_aligned(result, descriptors)
-                    ARRAY.pack_into(result, array, count + 1, new_offset)
+                    ARRAY.pack_into(result, array, new_sequence_count, new_offset)
     return bytes(result)
 
 
@@ -101,15 +107,17 @@ def preview_login(archive_type, client_data):
     return login + sequence.encode("ascii") + Path(__file__).with_name("duet_preview.lua").read_bytes()
 
 
-def build_duet(archive_type, client_data, first_clip, second_clip, output, *, preview=False):
+def build_duet(archive_type, client_data, first_clip, second_clip, output, *, preview=False, third_clip=None):
     model = client_poc.read_source(archive_type, client_data / "patch-3.MPQ",
                                    client_poc.MODEL_PATH, client_poc.MODEL_HASH)
     animation = client_poc.read_source(archive_type, client_data / "patch-2.MPQ",
                                        client_poc.ANIMATION_PATH, client_poc.ANIMATION_HASH)
-    members = {client_poc.MODEL_PATH: duplicate_slot(model)}
+    has_third = third_clip is not None
+    members = {client_poc.MODEL_PATH: duplicate_slot(model, third=has_third)}
+    slot_members = UNIFIED_SLOT_MEMBERS if has_third else SLOT_MEMBERS
+    clip_paths = (first_clip, second_clip, third_clip) if has_third else (first_clip, second_clip)
     report = {}
-    for slot, clip_path in zip(SLOT_MEMBERS, (first_clip, second_clip)):
-        member = SLOT_MEMBERS[slot]
+    for (slot, member), clip_path in zip(slot_members.items(), clip_paths, strict=True):
         clip = json.loads(clip_path.read_text(encoding="utf-8"))
         baked, stats = client_poc.bake_clip(model, animation, clip)
         members[member] = baked + slot_footer(slot)
@@ -136,6 +144,7 @@ def main():
     parser.add_argument("first_clip", type=Path, help="Clip for slot 211")
     parser.add_argument("second_clip", type=Path, help="Clip for slot 154")
     parser.add_argument("output", type=Path, help="New test MPQ outside the client")
+    parser.add_argument("--third-clip", type=Path, help="Optional clip for slot 155")
     parser.add_argument("--preview", action="store_true", help="Include the offline login-screen preview in the MPQ")
     parser.add_argument("--client-data", type=Path, default=client_poc.DEFAULT_DATA)
     parser.add_argument("--stormlib-module", type=Path, default=client_poc.DEFAULT_STORMLIB)
@@ -153,7 +162,7 @@ def main():
         stormlib = module_from_spec(spec)
         spec.loader.exec_module(stormlib)
         report = build_duet(stormlib.Archive, args.client_data, args.first_clip, args.second_clip, output,
-                            preview=args.preview)
+                            preview=args.preview, third_clip=args.third_clip)
     except (ImportError, KeyError, OSError, TypeError, ValueError) as error:
         parser.exit(1, f"Duet MPQ generation failed: {error}\n")
     print(json.dumps({"archive": str(output), "slots": report}, indent=2))

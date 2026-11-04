@@ -1,4 +1,4 @@
-"""Route two dancers' replicated emotes in an isolated 12340 observer client."""
+"""Route Spotlight dancers' replicated emotes in an isolated 12340 client."""
 
 import argparse
 import ctypes
@@ -38,10 +38,11 @@ MEM_RELEASE = 0x8000
 PAGE_EXECUTE_READ = 0x20
 PAGE_EXECUTE_READWRITE = 0x40
 PROCESS_READ_RIGHTS = 0x0410  # Query information and read process memory.
-SELECTOR_SIGNATURE = b"WoWDUET2"
+SELECTOR_SIGNATURE = b"WoWDUET3"
 GENERATION = len(SELECTOR_SIGNATURE)
 BANKS = 0x20
-BANK = struct.Struct("<QIIQII")
+SLOT_ORDER = (client_poc.ANIMATION_ID, duet_assets.SECOND_ANIMATION_ID, duet_assets.THIRD_ANIMATION_ID)
+BANK = struct.Struct("<" + "QII" * len(SLOT_ORDER))
 ANIMATE_CODE = 0x200
 REQUEST = 0x80
 REQUEST_DATA = struct.Struct("<QIIII")
@@ -49,7 +50,6 @@ PENDING, RUNNING, APPLIED, SKIPPED = range(1, 5)
 REQUEST_TTL_MS = 500
 SLOT_DURATION_MS = 17_700
 MARKER = "WoWSpotlight duet lab"
-SLOT_ORDER = (client_poc.ANIMATION_ID, duet_assets.SECOND_ANIMATION_ID)
 SLOTS = set(SLOT_ORDER)
 
 
@@ -296,7 +296,10 @@ def selector_address(process):
     if site[:1] != b"\xe9" or site[5:] != b"\x90" + ORIGINAL[OVERWRITE:]:
         raise ValueError("The client's emote resolver has unexpected instructions.")
     address = (HOOK + 5 + struct.unpack_from("<i", site, 1)[0]) & 0xFFFFFFFF
-    if read_exact(process, address + PAGE, len(SELECTOR_SIGNATURE)) != SELECTOR_SIGNATURE:
+    signature = read_exact(process, address + PAGE, len(SELECTOR_SIGNATURE))
+    if signature == b"WoWDUET2":
+        raise ValueError("Restart WoW to replace the previous Spotlight selector.")
+    if signature != SELECTOR_SIGNATURE:
         raise ValueError("The emote resolver points to an unrecognized selector.")
     code = selector_code(address)
     if read_exact(process, address, len(code)) != code:
@@ -351,7 +354,7 @@ def configure(process, actors):
     """Publish the complete mapping from the companion's single writer."""
     actors = tuple(actors)
     if not valid_actors(actors):
-        raise ValueError("Supply at most two distinct dancer GUIDs and use each duet slot once.")
+        raise ValueError("Supply distinct dancer GUIDs and use each supported slot at most once.")
     address = selector_address(process)
     if address is None:
         raise ValueError("Install the duet selector before setting its assignments.")
@@ -462,8 +465,9 @@ def install(process, actors, kernel):
             raise ValueError("The observer did not allocate memory in its 32-bit address space.")
         code = selector_code(address)
         timing_code = animate_code(address)
-        if len(code) > ANIMATE_CODE or ANIMATE_CODE + len(timing_code) > PAGE:
-            raise ValueError("The duet instructions no longer fit their executable page.")
+        if (len(code) > ANIMATE_CODE or ANIMATE_CODE + len(timing_code) > PAGE
+                or BANKS + 2 * BANK.size > REQUEST):
+            raise ValueError("The Spotlight selector no longer fits its memory layout.")
         state = SELECTOR_SIGNATURE.ljust(BANKS, b"\0") + pack_bank(actors) + bytes(BANK.size)
         process.write(address + PAGE, state)
         process.write(address, code)
@@ -506,7 +510,7 @@ def install(process, actors, kernel):
 def install_once(process, pid, actors=()):
     actors = tuple(actors)
     if not valid_actors(actors):
-        raise ValueError("Supply at most two distinct dancer GUIDs and use each duet slot once.")
+        raise ValueError("Supply distinct dancer GUIDs and use each supported slot at most once.")
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     mutex = bind(kernel, "CreateMutexW", wintypes.HANDLE,
                  ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR)
@@ -525,7 +529,7 @@ def install_once(process, pid, actors=()):
 
 def valid_actors(actors):
     actors = tuple(actors)
-    return (len(actors) <= 2 and len({guid for guid, _ in actors}) == len(actors)
+    return (len(actors) <= len(SLOT_ORDER) and len({guid for guid, _ in actors}) == len(actors)
             and all(0 < guid < 2**64 for guid, _ in actors)
             and len({slot for _, slot in actors}) == len(actors)
             and all(slot in SLOTS for _, slot in actors))
@@ -566,7 +570,7 @@ def main():
         action.add_argument("--client-dir", type=Path, required=True)
         if command == "install":
             action.add_argument("--actor", type=parse_actor, action="append", default=[],
-                                help="Dancer GUID=slot. Optional, with up to one dancer per slot 211 or 154.")
+                                help="Dancer GUID=slot. Optional, with one dancer per supported slot (211, 154, 155).")
     args = parser.parse_args()
     client_dir = args.client_dir.resolve()
     try:
@@ -576,7 +580,7 @@ def main():
                 raise ValueError("The selected client is missing the duet lab marker.")
             actors = tuple(sorted(args.actor))
             if not valid_actors(actors):
-                raise ValueError("Supply at most two distinct dancer GUIDs and use each duet slot once.")
+                raise ValueError("Supply distinct dancer GUIDs and use each supported slot at most once.")
             if not (client_dir / "Data" / "patch-Z.MPQ").is_file():
                 raise ValueError("Install the duet animation patch in the isolated observer first.")
         rights = runtime_poc.PROCESS_RIGHTS if args.action == "install" else PROCESS_READ_RIGHTS

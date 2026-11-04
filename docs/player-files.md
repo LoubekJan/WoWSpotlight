@@ -1,40 +1,34 @@
-# Soubory pro ruční přípravu klienta
+# Jeden klient WoWSpotlight
 
-Na AI World Lab jsou hotové soubory v `C:\WoWSpotlight\artifacts\player-files`. Použij WoW 3.3.5a enUS build 12340. Kopíruj při vypnuté hře do složky, ve které je `WoW.exe`.
+Na AI World Lab jsou hotové soubory v `C:\WoWSpotlight\artifacts\player-files`. Stejný klient WoW umí vytvářet vlastní tance i přehrávat tance ostatních.
 
-## Tvorba tance přes `/spotlight`
+1. Vypni čistou kopii WoW **3.3.5a enUS build 12340**. Zkopíruj celý **obsah** složky `player-files` tam, kde je `WoW.exe`. `Data\enUS\realmlist.wtf` nastaví připojení k AI World Lab.
+2. Spusť `WoW.exe`, přihlas se za lidskou mužskou postavu a použij režim okna. Zadej `/spotlight`, vyber **Upload video** a po zpracování použij **Play dance**. Sdílené tance postav v dosahu na stejném realmu se načítají automaticky.
 
-Ze složky `Creator` zkopíruj do klienta `Data` a `Interface`. Výsledkem mají být tyto cesty od `WoW.exe`.
+Složka klienta po zkopírování obsahuje tyto nové soubory a adresáře.
 
 ```text
-Data\enUS\patch-enUS-Z.MPQ
-Interface\AddOns\SpotlightDanceLab\SpotlightDanceLab.toc
-Interface\AddOns\SpotlightDanceLab\SpotlightDanceLab.lua
+WoW.exe
+dinput8.dll
+SpotlightDuet.lab
+Data\patch-Z.MPQ
+Data\enUS\realmlist.wtf
+Interface\AddOns\SpotlightDanceLab\
+Spotlight\
 ```
 
-Soubor `.toc` říká WoW, aby načetl `.lua`, který obsahuje panel Spotlight. MPQ přesměruje herní `/dance` na animační slot Spotlightu.
+`Spotlight` obsahuje přibalený Python a potřebné knihovny. `dinput8.dll` při spuštění hry předá požadavky DirectInput systémové knihovně a na pozadí spustí Spotlight. Stav pomocné části se zapisuje do `Logs\SpotlightBridge.log` v klientu.
 
-Pro výběr videa, komunikaci s ComfyUI a načtení pohybu potřebuješ celou složku `Companion`. Ulož ji vedle hry nebo jinam na disk. Obsahuje i `vendor\StormLib.dll`. Na Windows použij 64bitový Python 3.12 s Python Launcherem a Tcl/Tk.
+Pro **sdílení vlastního tance** správce přiřadí token k GUID dané postavy a před předáním jej přidá do `Spotlight\relay.token` v souborech pro konkrétního hráče. Hráč může vytvářet vlastní tance pro sebe i sledovat ostatní už se základní sadou souborů. [Nastavení sdílecí služby](sharing.md#nastavení-služby-spotlight)
 
-Přihlas se ve WoW za lidskou mužskou postavu a nech klienta v režimu okna. V PowerShellu spuštěném ve složce `player-files` zadej následující příkaz. Cestu `C:\Hry\WoW` nahraď složkou svého `WoW.exe`.
+## Sestavení souborů pro lab
+
+Z kořene projektu sestav `dinput8.dll` pomocí MSVC s nástroji pro C++ a potom připrav novou složku souborů. Pro sestavení použij 64bitový Python 3.12 pro Windows s Tcl/Tk, StormLib v `tools\dance_capture\vendor` a data ověřeného klienta.
 
 ```powershell
-py -3.12 -B '.\Companion\spotlight_bridge.py' --client-dir 'C:\Hry\WoW' --comfy-url 'http://192.168.0.248:8188'
+& '.\tools\dance_capture\bootstrap\build.cmd' '.\artifacts\unified-work\dinput8.dll'
+py -3.12 -B '.\tools\dance_capture\build_unified_files.py' '.\artifacts\player-files' `
+    --client-data 'C:\WoWModding\Client-Lab\Data' --bootstrap '.\artifacts\unified-work\dinput8.dll'
 ```
 
-Nech PowerShell otevřený a ve hře zadej `/spotlight`. Použij **Upload video** a po zpracování **Play dance**. Pro přenos k dalším hráčům použij také adresu služby a token přidělený konkrétní postavě. [Nastavení sdílení pro tanečníka](sharing.md#tanečník)
-
-## Sledování sdílených tanců
-
-Do samostatné kopie klienta zkopíruj obsah `Viewer`. Výsledkem mají být `Data\patch-Z.MPQ`, `SpotlightDuet.lab` vedle `WoW.exe` a složka `Interface\AddOns\SpotlightViewer` s oběma soubory doplňku.
-
-Přihlas se na stejný testovací realm jako tanečník a zůstaň na výběru postavy. V PowerShellu spuštěném ve složce `player-files` vlož tento blok s vlastní cestou ke klientu diváka.
-
-```powershell
-$client = 'C:\Hry\WoW-Divak'
-$wow = @(Get-Process WoW | Where-Object Path -eq (Join-Path $client 'WoW.exe'))
-if ($wow.Count -ne 1) { throw 'Spusť jednu kopii WoW ze složky diváka.' }
-py -3.12 -B '.\Companion\spotlight_viewer.py' $wow[0].Id --client-dir $client --relay-url 'http://192.168.0.248:8765'
-```
-
-Po hlášce **Spotlight viewer is ready** vstup do světa a nech PowerShell otevřený. Divák si sdílený pohyb stáhne, jakmile má tanečníka na dohled.
+Výstupní složka musí být nová. Pro jiný lab nastav adresu realmu volbou `--realmlist` a adresy služeb volbami `--comfy-url` a `--relay-url`.

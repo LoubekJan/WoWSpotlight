@@ -40,15 +40,21 @@ class DuetRuntime:
         self.tracks = client_poc.full_body_tracks(self.model, self.stock)
         self.translations = client_poc.translation_ranges(self.model)
         with stormlib.Archive(data / "patch-Z.MPQ") as archive:
-            if archive.read(client_poc.MODEL_PATH) != duet_assets.duplicate_slot(self.model):
+            installed_model = archive.read(client_poc.MODEL_PATH)
+            if installed_model == duet_assets.duplicate_slot(self.model):
+                slot_members = duet_assets.SLOT_MEMBERS
+            elif installed_model == duet_assets.duplicate_slot(self.model, third=True):
+                slot_members = duet_assets.UNIFIED_SLOT_MEMBERS
+            else:
                 raise ValueError("The installed MPQ does not contain the verified duet model.")
-            for slot, member in duet_assets.SLOT_MEMBERS.items():
+            for slot, member in slot_members.items():
                 animation = archive.read(member)
                 if animation[len(self.stock):] != duet_assets.slot_footer(slot):
                     raise ValueError("Rebuild and install the duet MPQ with slot identifiers.")
+        self.slots = tuple(slot_members)
 
     def apply(self, slot, clip_path):
-        if slot not in duet_assets.SLOT_MEMBERS:
+        if slot not in self.slots:
             raise ValueError("Choose one of the verified duet animation slots.")
         try:
             clip = json.loads(Path(clip_path).read_text(encoding="utf-8"))
@@ -70,7 +76,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pid", type=int, help="PID of the isolated duet WoW.exe")
     parser.add_argument("clip", type=Path, help="Spotlight full-body motion JSON")
-    parser.add_argument("--slot", type=int, choices=duet_assets.SLOT_MEMBERS, required=True)
+    parser.add_argument("--slot", type=int, choices=duet_assets.UNIFIED_SLOT_MEMBERS, required=True)
     parser.add_argument("--client-dir", type=Path, required=True)
     parser.add_argument("--stormlib-module", type=Path, default=client_poc.DEFAULT_STORMLIB)
     args = parser.parse_args()

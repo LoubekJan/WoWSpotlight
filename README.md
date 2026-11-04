@@ -2,15 +2,9 @@
 
 WoWSpotlight je PoC pro tvorbu vlastních tanců z videa ve WoW 3.3.5a. Hráč otevře panel příkazem `/spotlight`, vybere MP4 a po zpracování v ComfyUI najde klip v knihovně **My dances**. Klient načte animaci za běhu a připravený klient diváka si ji může [automaticky stáhnout](docs/sharing.md).
 
-## Spuštění připraveného klienta
+## Spuštění v čistém klientu
 
-1. Na AI World Lab spusť `C:\WoWModding\SpotlightPoC\Start Spotlight.cmd`. Otevře testovací WoW z `C:\WoWModding\SpotlightPoC\LiveActor` a pomocnou aplikaci Windows. Pro vlastní instalaci použij [spouštěč z repozitáře](<Start Spotlight.cmd>), který má výchozí adresu ComfyUI `http://127.0.0.1:8188`.
-
-   ```powershell
-   & '.\Start Spotlight.cmd' --client-dir 'C:\WoWModding\SpotlightPoC\LiveActor' --comfy-url 'http://127.0.0.1:8188'
-   ```
-
-2. Přihlas se za lidskou mužskou postavu a nech WoW v režimu okna. Pokud bylo WoW při aktualizaci doplňku otevřené, zadej `/reload`. Pak otevři `/spotlight`.
+Zkopíruj obsah `C:\WoWSpotlight\artifacts\player-files` do čistého klienta WoW 3.3.5a enUS a spusť jeho `WoW.exe`. Přihlas se za lidskou mužskou postavu, nech WoW v režimu okna a otevři `/spotlight`. Stejný klient automaticky přehrává sdílené tance ostatních. [Přesný postup pro lab](docs/player-files.md)
 
 ## Moje tance
 
@@ -21,24 +15,16 @@ Knihovna je ve složce klienta pod `Spotlight\library` a ukládá se zvlášť p
 
 ## První instalace
 
-Pro dalšího hráče jsou v `C:\WoWSpotlight\artifacts\player-files` připravené soubory k ručnímu zkopírování. Složky `Creator` a `Viewer` odpovídají struktuře klienta WoW. Složka `Companion` obsahuje pomocnou aplikaci, kterou hráč spouští vedle hry. [Ruční příprava klienta](docs/player-files.md)
+Složka `artifacts` obsahuje místní výstupy sestavené z dat klienta. Návody níže zahrnují i starší samostatné testy jednotlivých částí.
 
-Na AI World Lab jsou hotové instalační balíčky ve složce `C:\WoWSpotlight\artifacts\install`. Při vypnutém WoW zkopíruj zvolený soubor do nové kopie klienta.
-
-| Účel | Soubor ve složce `artifacts\install` | Kam v klientu |
-| --- | --- | --- |
-| Porovnání kvality na přihlašovací obrazovce | `preview\Data\patch-Z.MPQ` | `Data\patch-Z.MPQ` |
-| Tvorba tanců ve hře přes `/spotlight` | `live\Data\enUS\patch-enUS-Z.MPQ` | `Data\enUS\patch-enUS-Z.MPQ` |
-
-Složka `artifacts` obsahuje místní výstupy sestavené z dat klienta. Návody níže popisují sestavení vlastních balíčků z čerstvého klonu GitHubu.
-
-- [Příprava testovacího klienta a zkouška s druhým hráčem](tools/dance_capture/live_lab/README.md)
+- [Sestavení souborů pro společný klient](docs/player-files.md#sestavení-souborů-pro-lab)
+- [Starší zkouška s odděleným klientem diváka](tools/dance_capture/live_lab/README.md)
 - [Instalace uzlů a workflow v ComfyUI](docs/comfyui.md)
 - [Původní extraktor a náhled animace bez realmu](tools/dance_capture/README.md)
 - [Duet na testovacím realmu a samostatný náhled](docs/duet.md)
 - [Automatické sdílení a přehrávání u diváka](docs/sharing.md)
 
-Klient WoW, knihovnu StormLib a model MediaPipe je potřeba dodat podle návodů. Zdrojové soubory zahrnují doplněk do WoW, pomocnou aplikaci pro Windows, nástroje pro sestavení klientského balíčku, uzly ComfyUI a workflow.
+Pro sestavení klientských souborů potřebuješ data WoW a knihovnu StormLib. Model MediaPipe patří na server s ComfyUI. Zdrojové soubory zahrnují doplněk do WoW, pomocnou aplikaci pro Windows, nástroje pro sestavení klientských souborů, uzly ComfyUI a workflow.
 
 ## Rozsah PoC
 

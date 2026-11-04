@@ -37,18 +37,23 @@ class Assignment:
 
 
 class Viewer:
-    def __init__(self, process, runtime, relay, cache):
+    def __init__(self, process, runtime, relay, cache, *, slots=SLOTS):
         self.process = process
         self.runtime = runtime
         self.relay = relay
         self.cache = cache
+        self.slots = slots
+        self.local_guid = 0
         self.state = None
         self.assignments = {}
         self.retired = {}
         self.configured = ()
 
     def configure(self):
-        actors = tuple(sorted((guid, assignment.slot) for guid, assignment in self.assignments.items()))
+        actors = [(guid, assignment.slot) for guid, assignment in self.assignments.items()]
+        if self.local_guid:
+            actors.append((self.local_guid, client_poc.ANIMATION_ID))
+        actors = tuple(sorted(actors))
         if actors != self.configured:
             duet_select.configure(self.process, actors)
             self.configured = actors
@@ -62,12 +67,13 @@ class Viewer:
                 del self.retired[slot]
 
     def tick(self):
-        try:
-            self.state = self.relay.state()
-        except (OSError, RelayError, URLError) as error:
-            logging.warning("Could not read Spotlight relay: %s", error)
         manager = duet_select.object_manager(self.process)
         observer = duet_select.active_guid(self.process)
+        if observer:
+            try:
+                self.state = self.relay.state()
+            except (OSError, RelayError, URLError) as error:
+                logging.warning("Could not read Spotlight relay: %s", error)
         events = {}
         if observer and self.state:
             now_ms = self.state.now_ms()
@@ -86,7 +92,7 @@ class Viewer:
 
         for guid, event in events.items():
             if guid not in self.assignments:
-                free = next((slot for slot in SLOTS
+                free = next((slot for slot in self.slots
                              if slot not in self.retired
                              and all(a.slot != slot for a in self.assignments.values())), None)
                 if free is None:
