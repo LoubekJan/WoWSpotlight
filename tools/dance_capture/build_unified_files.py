@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 
 import client_poc
 import duet_multirig
+from spotlight_client import realm_host
 from stormlib import Archive, DLL_PATH
 
 
@@ -57,9 +58,10 @@ def build_files(client_data, bootstrap, output, settings, realmlist):
         metadata = "## X-Spotlight-Unified: 1\n## X-Spotlight-MultiRig: 1\n"
         (addon_destination / f"{addon}.toc").write_text(metadata + toc, encoding="utf-8")
         duet_multirig.build_multirig(Archive, client_data, files / "Data" / "patch-Z.MPQ")
-        realm_file = files / "Data" / "enUS" / "realmlist.wtf"
-        realm_file.parent.mkdir()
-        realm_file.write_text(f"set realmlist {realmlist}\n", encoding="ascii")
+        if realmlist:
+            realm_file = files / "Data" / "enUS" / "realmlist.wtf"
+            realm_file.parent.mkdir()
+            realm_file.write_text(f"set realmlist {realmlist}\n", encoding="ascii")
         files.rename(output)
 
 
@@ -68,11 +70,11 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--client-data", type=Path, required=True)
     parser.add_argument("--bootstrap", type=Path, required=True)
-    parser.add_argument("--comfy-url", default="http://192.168.0.248:8188")
-    parser.add_argument("--gallery-url", default="http://192.168.0.248:9093")
-    parser.add_argument("--relay-url", default="http://192.168.0.248:8765")
+    parser.add_argument("--comfy-url", help="Override the ComfyUI address derived from realmlist.wtf")
+    parser.add_argument("--gallery-url", help="Override the gallery address derived from realmlist.wtf")
+    parser.add_argument("--relay-url", help="Override the relay address derived from realmlist.wtf")
     parser.add_argument("--relay-realm-auth", action=argparse.BooleanOptionalAction, default=True)
-    parser.add_argument("--realmlist", default="192.168.0.248")
+    parser.add_argument("--realmlist", help="Include a realmlist.wtf for this hostname or IP address")
     args = parser.parse_args()
     if sys.platform != "win32" or sys.version_info[:2] != (3, 12) or struct.calcsize("P") != 8:
         parser.error("Use 64-bit Python 3.12 for Windows with Tcl/Tk.")
@@ -80,11 +82,14 @@ def main():
     data = args.client_data.resolve()
     if output.exists() or any(output.is_relative_to(path) for path in (data.parent, client_poc.DEFAULT_DATA.parent)):
         parser.error("Choose a new output folder outside the WoW client.")
-    if not args.realmlist or not all(char.isascii() and (char.isalnum() or char in ".-:[]") for char in args.realmlist):
-        parser.error("Supply a realm address without spaces.")
     try:
-        settings = {"comfy_url": args.comfy_url, "gallery_url": args.gallery_url, "relay_url": args.relay_url,
-                    "relay_realm_auth": args.relay_realm_auth}
+        if args.realmlist is not None:
+            realm_host(args.realmlist)
+        settings = {"relay_realm_auth": args.relay_realm_auth}
+        for key in ("comfy_url", "gallery_url", "relay_url"):
+            value = getattr(args, key)
+            if value is not None:
+                settings[key] = value
         build_files(data, args.bootstrap, output, settings, args.realmlist)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Could not build Spotlight client files: {error}\n")

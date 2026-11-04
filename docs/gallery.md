@@ -25,4 +25,4 @@ docker compose -p wowspotlight-gallery --env-file gallery/.env.gallery \
   -f gallery/compose.yaml -f gallery/compose.comfy.yaml up -d --build
 ```
 
-Galerie ukládá klipy a metadata do SQLite na pojmenovaném Docker svazku `dances`. Adresu pro klienta nastav při sestavení přes `--gallery-url` nebo v `Spotlight/settings.json` pomocí `gallery_url`. Klient používá stejnou adresu pro seznam i stažení klipu.
+Galerie ukládá klipy a metadata do SQLite na pojmenovaném Docker svazku `dances`. Klient ve výchozím nastavení používá hostitele z `realmlist.wtf` a port `9093`. Pro jinou adresu nastav `--gallery-url` při sestavení nebo `gallery_url` v `Spotlight/settings.json`. Klient používá stejnou adresu pro seznam i stažení klipu.

@@ -4,7 +4,7 @@ Na AI World Lab jsou hotové soubory v `C:\WoWSpotlight\artifacts\player-files`.
 
 Spotlight přijímá původní podepsaný `WoW.exe` pro enUS build 12340 a ověřené varianty stejného buildu. Před připojením kontroluje také animační data a instrukce klienta, které používá.
 
-1. Vypni čistou kopii WoW **3.3.5a enUS build 12340**. Zkopíruj celý **obsah** složky `player-files` tam, kde je `WoW.exe`. `Data\enUS\realmlist.wtf` nastaví připojení k AI World Lab.
+1. Vypni čistou kopii WoW **3.3.5a enUS build 12340**. Zkopíruj celý **obsah** složky `player-files` tam, kde je `WoW.exe`. Pro připojení k AI World Labu použij v herním `Data\enUS\realmlist.wtf` řádek `set realmlist 192.168.0.248`.
 2. Spusť `WoW.exe`, přihlas se za libovolnou z deseti hratelných ras a použij režim okna. Zadej `/spotlight`, vyber **Upload video** a po zpracování použij **Play dance**. Sdílené tance postav v dosahu na stejném realmu se načítají automaticky.
 
 Vlastní tanec spustíš tlačítkem **Play dance**. Příkaz `/dance` přehraje běžný tanec WoW i po načtení vlastního klipu. Každý klient má prostor pro vlastní tanec a dva současně sledované tanečníky.
@@ -20,7 +20,6 @@ WoW.exe
 dinput8.dll
 SpotlightDuet.lab
 Data\patch-Z.MPQ
-Data\enUS\realmlist.wtf
 Interface\AddOns\SpotlightDanceLab\
 Spotlight\
 ```
@@ -28,6 +27,12 @@ Spotlight\
 `Spotlight` obsahuje přibalený Python a potřebné knihovny. `dinput8.dll` při spuštění hry předá požadavky DirectInput systémové knihovně a na pozadí spustí Spotlight. Stav pomocné části se zapisuje do `Logs\SpotlightBridge.log` v klientu.
 
 Na AI World Labu se klient pro **sdílení vlastního tance** automaticky ověří přes právě přihlášenou postavu. Oba hráči mohou použít stejný balíček. Volba `--no-relay-realm-auth` při sestavení zachová původní ruční nastavení pro lab se samostatnými tokeny. [Nastavení sdílecí služby](sharing.md#nastavení-služby-spotlight)
+
+## Adresy služeb
+
+Při startu Spotlight použije hostitele z `set realmlist` v `Data\enUS\realmlist.wtf`. ComfyUI použije port `8188`, galerie `9093` a relay `8765`. Případný přihlašovací port WoW v `realmlist.wtf` patří jen ke hře.
+
+V `Spotlight\settings.json` můžeš pro jednotlivé služby výslovně zadat `comfy_url`, `gallery_url` nebo `relay_url`. Každá vyplněná URL má přednost. Po úpravě nastavení restartuj WoW. Při použití ručního `relay.token` uveď výslovně i `relay_url`.
 
 ## Sestavení souborů pro lab
 
@@ -39,4 +44,4 @@ py -3.12 -B '.\tools\dance_capture\build_unified_files.py' '.\artifacts\player-f
     --client-data 'C:\WoWModding\Client-Lab\Data' --bootstrap '.\artifacts\unified-work\dinput8.dll'
 ```
 
-Výstupní složka musí být nová. Pro jiný lab nastav adresu realmu volbou `--realmlist` a adresy služeb volbami `--comfy-url`, `--relay-url` a `--gallery-url`.
+Výstupní složka musí být nová. Volba `--realmlist` přidá soubor s adresou zvoleného realmu. Pro výslovné adresy služeb použij `--comfy-url`, `--relay-url` nebo `--gallery-url`.
