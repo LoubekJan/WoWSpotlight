@@ -28,11 +28,12 @@ Použij krátký klip s jedním tanečníkem, pevnou kamerou a celým tělem v z
 
 PoC přenáší změnu ohybu pravého lokte z videa na kost předloktí modelu HumanMale. Používá existující animační slot 211 a zachovává jeho ostatní animační stopy. Klip se musí vejít do 17,7sekundového slotu. Po konci klipu drží předloktí poslední zachycenou polohu až do konce slotu.
 
-Nejprve nainstaluj [StormLib](live_lab/README.md#jednorázová-příprava). Generátory používají data klienta `C:\WoWModding\Client-Lab\Data`. Jinou cestu můžeš předat pomocí `--client-data`. Výstupy vytvářej mimo klienta.
+Nejprve nainstaluj [StormLib](live_lab/README.md#jednorázová-příprava). Generátorům předej vlastní složku `Data` ověřeného klienta. Výstupy vytvářej mimo klienta.
 
 ```powershell
-py -3.12 -B source/tools/dance_capture/client_poc.py .\tanec.pose.json .\patch-Z.MPQ
-py -3.12 -B source/tools/dance_capture/preview_poc.py .\patch-enUS-Z.MPQ
+$wowData = 'C:\Games\WoW 3.3.5a\Data'  # Cesta k datům tvého klienta
+py -3.12 -B source/tools/dance_capture/client_poc.py .\tanec.pose.json .\patch-Z.MPQ --client-data $wowData
+py -3.12 -B source/tools/dance_capture/preview_poc.py .\patch-enUS-Z.MPQ --client-data $wowData
 ```
 
 1. Vypni oddělenou testovací kopii WoW 3.3.5a enUS. Do její složky `Data\enUS` přidej `patch-enUS-Z.MPQ`, který zapíná offline náhled. Spusť klienta a podívej se na siluetu vpravo v čase 417 ms. To je kontrolní vzorek s původní animací.

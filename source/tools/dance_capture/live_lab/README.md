@@ -1,15 +1,17 @@
 # Příprava klienta a zkouška s divákem
 
+> Historický postup pro ruční zkoušku s oddělenými klienty. Pro běžné hraní použij [aktuální návod pro hráče](../../../docs/player-files.md).
+
 ## Jednorázová příprava
 
 1. Nainstaluj **64bitový Python 3.12 pro Windows** s Python Launcherem a podporou Tcl/Tk. V PowerShellu ověř `py -3.12 --version`.
-2. Připrav oddělenou testovací kopii WoW **3.3.5a enUS build 12340** a nastav připojení k testovacímu realmu. Výchozí složka je `C:\WoWModding\SpotlightPoC\LiveActor`. Pro zkoušku s divákem připrav druhou kopii `LiveObserver`. Skripty kontrolují přesnou verzi `WoW.exe` a potřebných dat.
+2. Připrav vlastní izolovanou kopii WoW **3.3.5a enUS build 12340** a nastav připojení k testovacímu realmu. V příkladech je tanečník v `C:\SpotlightTests\LiveActor` a divák v `C:\SpotlightTests\LiveObserver`. Skripty kontrolují přesnou verzi `WoW.exe` a potřebných dat.
 3. Stáhni [StormLib pro Windows](https://github.com/ladislav-zezula/StormLib/releases/download/v9.40/stormlib_dll.zip). Z archivu vezmi `x64\StormLib.dll` a ulož ji do `source\tools\dance_capture\vendor\StormLib.dll` v tomto repozitáři. Složku `vendor` v případě potřeby vytvoř.
-4. Vypni testovací klienty a spusť následující blok z kořene repozitáře v PowerShellu. Cesty v prvních řádcích odpovídají již používané instalaci. Pro vlastní instalaci je uprav. Skript vytvoří balíček v `artifacts` mimo klienta a doplněk zkopíruje do `Interface\AddOns`. Pokud `Data\enUS\patch-enUS-Z.MPQ` ve tvém klientu už slouží jiné úpravě, vyhraď pro zkoušku samostatnou kopii.
+4. Vypni testovací klienty a spusť následující blok z kořene repozitáře v PowerShellu. V `$actor` a `$observer` nastav skutečné cesty ke svým kopiím. Skript vytvoří balíček v `artifacts` mimo klienta a doplněk zkopíruje do `Interface\AddOns`. Pokud `Data\enUS\patch-enUS-Z.MPQ` ve tvém klientu už slouží jiné úpravě, vyhraď pro zkoušku samostatnou kopii.
 
    ```powershell
-   $actor = 'C:\WoWModding\SpotlightPoC\LiveActor'
-   $observer = 'C:\WoWModding\SpotlightPoC\LiveObserver' # Pro jediného hráče použij $null.
+   $actor = 'C:\SpotlightTests\LiveActor'
+   $observer = 'C:\SpotlightTests\LiveObserver' # Pro jediného hráče použij $null.
    $package = New-Item -ItemType Directory -Force '.\artifacts\install\live\Data\enUS'
    $patch = Join-Path $package.FullName 'patch-enUS-Z.MPQ'
    if (-not (Test-Path -LiteralPath $patch)) {
@@ -30,15 +32,15 @@
    ```
 
    Balíček mapuje běžný herní tanec na slot 211. Doplněk drží slot připravený v paměti a po stisku **Play dance** spustí herní emoci `/dance`.
-5. Připrav [ComfyUI](../../../docs/comfyui.md) a z kořene projektu spusť `& '.\source\Start Spotlight.cmd' --client-dir $actor --comfy-url 'http://192.168.0.248:8188'`. Přihlas se za lidskou mužskou postavu, nech WoW v režimu okna a zadej `/spotlight`.
+5. Připrav [ComfyUI](../../../docs/comfyui.md) a z kořene projektu spusť `& '.\source\Start Spotlight.cmd' --client-dir $actor --comfy-url 'http://127.0.0.1:8188'`. Použij adresu své instance ComfyUI. Přihlas se za lidskou mužskou postavu, nech WoW v režimu okna a zadej `/spotlight`.
 
 ## Ruční ověření s divákem
 
 1. Přihlas oba klienty na stejný testovací realm a postav postavy vedle sebe. Tanečník musí být lidský muž. V `LiveActor` vytvoř tanec přes `/spotlight`. Jakmile panel oznámí dokončení, soubor je v `LiveActor\Spotlight\active.pose.json`.
-2. V PowerShellu otevřeném v kořeni repozitáře spusť hlídač pro `LiveObserver`. Sleduje soubor `ManualDemo\Observer\active.pose.json`. Pro čistý test nech tuto složku před spuštěním prázdnou a použij čerstvě spuštěného diváka.
+2. V PowerShellu otevřeném v kořeni repozitáře spusť hlídač pro `LiveObserver`. Uprav `$lab` a `$client` podle vlastní instalace. Hlídač sleduje soubor `ManualDemo\Observer\active.pose.json` pod `$lab`. Pro čistý test nech tuto složku před spuštěním prázdnou a použij čerstvě spuštěného diváka.
 
    ```powershell
-   $lab = 'C:\WoWModding\SpotlightPoC'
+   $lab = 'C:\SpotlightTests'
    $client = Join-Path $lab 'LiveObserver'
    $folder = Join-Path $lab 'ManualDemo\Observer'
    New-Item -ItemType Directory -Force $folder | Out-Null
@@ -52,7 +54,7 @@
 
    ```powershell
    $clipUrl = 'https://example.com/active.pose.json' # Nahraď skutečnou adresou klipu.
-   $folder = 'C:\WoWModding\SpotlightPoC\ManualDemo\Observer'
+   $folder = Join-Path 'C:\SpotlightTests' 'ManualDemo\Observer' # Uprav podle svého $lab.
    $temp = Join-Path $folder 'download.tmp'
    $active = Join-Path $folder 'active.pose.json'
    Invoke-WebRequest $clipUrl -OutFile $temp -ErrorAction Stop

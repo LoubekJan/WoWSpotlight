@@ -39,9 +39,10 @@ V `Spotlight\settings.json` můžeš pro jednotlivé služby výslovně zadat `c
 Z kořene projektu sestav `dinput8.dll` pomocí MSVC pro x86 a potom připrav novou složku souborů. Pro sestavení balíčku použij 64bitový Python 3.12 pro Windows s Tcl/Tk a data ověřeného klienta. Z archivu StormLib zkopíruj `x64\StormLib.dll` do `source\tools\dance_capture\vendor\StormLib.dll`. [StormLib pro Windows](https://github.com/ladislav-zezula/StormLib/releases/download/v9.40/stormlib_dll.zip)
 
 ```powershell
+$wowData = 'C:\Games\WoW 3.3.5a\Data'  # Cesta k datům tvého klienta
 & '.\source\tools\dance_capture\bootstrap\build.cmd' '.\artifacts\unified-work\dinput8.dll'
 py -3.12 -B '.\source\tools\dance_capture\build_unified_files.py' '.\artifacts\player-files' `
-    --client-data 'C:\WoWModding\Client-Lab\Data' --bootstrap '.\artifacts\unified-work\dinput8.dll'
+    --client-data $wowData --bootstrap '.\artifacts\unified-work\dinput8.dll'
 ```
 
 Výstupní složka musí být nová. Volba `--realmlist` přidá soubor s adresou zvoleného realmu. Pro výslovné adresy služeb použij `--comfy-url`, `--relay-url` nebo `--gallery-url`.

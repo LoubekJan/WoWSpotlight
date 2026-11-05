@@ -8,7 +8,7 @@ Podporovaný klient je **WoW 3.3.5a enUS, build 12340, pro Windows**. Tance fung
 |---|---|
 | Hrát | [Hotové soubory v `client/`](client/) a [návod pro hráče](source/docs/player-files.md) |
 | Nasadit služby | [Postup pro správce v `server/`](server/README.md) |
-| Upravit kód nebo sestavit klienta | [Zdrojový kód v `source/`](source/) a [návod na sestavení](source/docs/player-files.md#sestavení-klienta-ze-zdrojů) |
+| Upravit kód nebo sestavit klienta | [Přehled zdrojů v `source/`](source/README.md) a [návod na sestavení](source/docs/player-files.md#sestavení-klienta-ze-zdrojů) |
 
 ## Hráč
 

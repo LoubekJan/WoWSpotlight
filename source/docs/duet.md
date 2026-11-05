@@ -1,16 +1,18 @@
 # Duet na testovacím realmu
 
+> Historický postup pro izolovanou zkoušku původních animačních slotů. Pro běžné hraní použij [aktuální návod pro hráče](player-files.md).
+
 Zkouška přiřadí dvěma lidským mužským postavám dva hotové klipy. Obě spustí běžný `/dance`. Izolovaný klient diváka podle GUID každé postavy vybere animaci z jiného slotu. Přiřazení platí pro běžící proces diváka a restart je smaže.
 
-## Připravená zkouška
+## Zkouška s vlastními kopiemi
 
-Na počítači s AI World Lab jsou tři oddělené kopie klienta pod `C:\WoWModding\SpotlightPoC\Duet`. Každá má vlastní `WoW.exe` a konfiguraci. Divák už má oba ukázkové klipy v klientském balíčku.
+Připrav tři oddělené kopie klienta podle [přípravy testovacích kopií](#příprava-dalších-testovacích-kopií). Každá má vlastní `WoW.exe` a konfiguraci. Divák potřebuje balíček se dvěma ukázkovými klipy. Příklad používá složku `C:\SpotlightTests\Duet`. Pokud máš kopie jinde, nastav skutečnou cestu v `$duet`.
 
 1. Spusť `ActorA\WoW.exe`, `ActorB\WoW.exe` a `Observer\WoW.exe`. Použij tři účty. Tanečníci musí být lidští muži a musí už být ve světě. **Diváka nech na obrazovce výběru postavy.**
 2. Otevři PowerShell v kořeni repozitáře a spusť tento blok. Najde procesy podle přesných cest, z klientů tanečníků přečte jejich herní ID a nastaví přiřazení v divákovi.
 
    ```powershell
-   $duet = 'C:\WoWModding\SpotlightPoC\Duet'
+   $duet = 'C:\SpotlightTests\Duet'
    $tool = '.\source\tools\dance_capture\duet_select.py'
    $clients = @{}
    foreach ($role in 'ActorA', 'ActorB', 'Observer') {
@@ -46,27 +48,27 @@ Na AI World Lab obě postavy v jednom klientu diváka současně používaly rů
 
 ## Příprava dalších testovacích kopií
 
-Použij oddělené kopie WoW 3.3.5a enUS build 12340 z [návodu pro klienta](../tools/dance_capture/live_lab/README.md). Potřebuješ místní StormLib. Z kořene tohoto repozitáře sestav dva klipy a balíček. Výstupní MPQ musí mít novou cestu.
+Připrav vlastní izolované kopie WoW 3.3.5a enUS build 12340 pojmenované `ActorA`, `ActorB` a `Observer`. StormLib připrav podle [návodu pro testovací klient](../tools/dance_capture/live_lab/README.md#jednorázová-příprava). Z kořene tohoto repozitáře sestav dva klipy a balíček. U `--client-data` zadej skutečnou cestu k ověřeným datům hry. Výstupní MPQ musí mít novou cestu.
 
 ```powershell
 py -3.12 -B .\source\tools\dance_capture\make_duet_clips.py .\artifacts\duet
 py -3.12 -B .\source\tools\dance_capture\duet_assets.py `
     .\artifacts\duet\left-arm.motion.json .\artifacts\duet\right-arm.motion.json `
-    .\artifacts\duet\patch-Z.MPQ --client-data 'C:\WoWModding\Client-Lab\Data'
+    .\artifacts\duet\patch-Z.MPQ --client-data 'C:\SpotlightTests\Duet\ActorA\Data'
 ```
 
 Do složky `Data` vypnutého diváka vlož `patch-Z.MPQ`. Pokud už tento název používá jiná úprava, vyhraď pro duet vlastní kopii. Do kořene každé z těchto tří testovacích kopií vedle `WoW.exe` ulož soubor `SpotlightDuet.lab` s jediným řádkem `WoWSpotlight duet lab`. Skript marker kontroluje společně s cestou procesu a kontrolním součtem klienta.
 
 ## Náhled bez účtů
 
-Na připraveném počítači otevři `C:\WoWModding\SpotlightPoC\DuetPreview\WoW.exe`. Na přihlašovací obrazovce se zobrazí oba pohyby vedle sebe. Kliknutí na model jeho animaci pozastaví nebo obnoví.
+Po vložení náhledového balíčku spusť `WoW.exe` ze své samostatné testovací kopie. Na přihlašovací obrazovce se zobrazí oba pohyby vedle sebe. Kliknutí na model jeho animaci pozastaví nebo obnoví.
 
 Pro vlastní náhled přidej při sestavení přepínač `--preview`. Výsledný `patch-Z.MPQ` obsahuje oba klipy i skript pro přihlašovací obrazovku. Vlož ho do `Data\patch-Z.MPQ` samostatné vypnuté kopie klienta. Pokud aktualizuješ starší náhled, odlož jeho původní balíčky mimo klienta. Starší verze měla skript náhledu v `Data\enUS\patch-enUS-Z.MPQ`.
 
 ```powershell
 py -3.12 -B .\source\tools\dance_capture\duet_assets.py `
     .\artifacts\duet\left-arm.motion.json .\artifacts\duet\right-arm.motion.json `
-    .\artifacts\duet-preview\patch-Z.MPQ --preview --client-data 'C:\WoWModding\Client-Lab\Data'
+    .\artifacts\duet-preview\patch-Z.MPQ --preview --client-data 'C:\SpotlightTests\Duet\ActorA\Data'
 ```
 
 Tato zkouška používá dva předem sestavené sloty a ruční přiřazení ke dvěma postavám. Pro přenos nových klipů za běhu použij [automatické sdílení](sharing.md).

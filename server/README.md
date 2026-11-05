@@ -1,6 +1,6 @@
 # Nasazení serveru WoWSpotlight
 
-Server používá existující realm WoW 3.3.5a, instanci ComfyUI a tři služby na adrese dostupné hráčům. ComfyUI převádí videa, galerie nabízí hotové klipy a relay synchronizuje přehrávání. V příkazech níže pracuj z kořene repozitáře.
+Server používá existující realm WoW 3.3.5a, instanci ComfyUI a tři služby na adrese dostupné hráčům. ComfyUI převádí videa, galerie nabízí hotové klipy a relay synchronizuje přehrávání. Stáhni celý repozitář a příkazy spouštěj z jeho kořene. Konfigurace nasazení je v `server/` a používá aktuální kód ze [`source/`](../source/README.md).
 
 | Služba | Výchozí port klienta |
 |---|---|
